@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; script-src 'self'" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Civic Desk</title>
   <link rel="stylesheet" href="styles.css" />
@@ -32,6 +32,15 @@
       <div class="panel-head">
         <span>Format</span>
         <button id="collapse" class="round small" aria-label="Collapse format panel" title="Collapse">&rsaquo;</button>
+      </div>
+
+      <div class="group">
+        <div class="label">Font</div>
+        <button id="font-btn" class="font-btn" aria-haspopup="listbox" aria-expanded="false">Georgia</button>
+        <div id="font-pop" hidden>
+          <ul id="font-list" role="listbox"></ul>
+          <input id="font-add" type="text" placeholder="Add a Google Font…" aria-label="Add a Google Font by name" autocomplete="off" spellcheck="false" />
+        </div>
       </div>
 
       <div class="group">

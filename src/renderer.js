@@ -7,7 +7,7 @@
   const panel = $('#panel');
   const fab = $('#fab');
 
-  let state = { tabs: [], active: null, inspectorOpen: true };
+  let state = { tabs: [], active: null, inspectorOpen: true, myFonts: [] };
   let saveTimer = null;
 
   const uid = () => Math.random().toString(36).slice(2, 10);
@@ -170,6 +170,123 @@
 
   /* ---------- Format panel ---------- */
 
+  /* Font picker: only lists fonts actually installed on this computer. */
+  const FONT_CANDIDATES = ['Georgia', 'Iowan Old Style', 'Palatino', 'Baskerville', 'Times New Roman',
+    'Didot', 'Helvetica Neue', 'Avenir Next', 'Optima', 'Gill Sans', 'Futura', 'Verdana',
+    'Trebuchet MS', 'American Typewriter', 'Menlo', 'Courier New'];
+  const fontBtn = $('#font-btn');
+  const fontPop = $('#font-pop');
+  const fontList = $('#font-list');
+  const fontAdd = $('#font-add');
+
+  // Your saved Google Fonts live in your own user-data file, never in the repo.
+  const validFontName = (n) => /^[A-Za-z0-9][A-Za-z0-9 ]{0,60}$/.test(n);
+  function loadGoogleFont(name) {
+    if (!validFontName(name)) return;
+    if (document.querySelector(`link[data-gf="${name}"]`)) return;
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.dataset.gf = name;
+    link.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(name).replace(/%20/g, '+')}&display=swap`;
+    document.head.appendChild(link);
+  }
+
+  function fontInstalled(name) {
+    const ctx = document.createElement('canvas').getContext('2d');
+    const sample = 'mmmmmmmmmmlliWWW';
+    const width = (family) => { ctx.font = `72px ${family}`; return ctx.measureText(sample).width; };
+    return ['monospace', 'serif', 'sans-serif'].some((fb) => width(`"${name}", ${fb}`) !== width(fb));
+  }
+
+  function currentFont() {
+    const sel = document.getSelection();
+    let node = sel.anchorNode;
+    if (!node || !editor.contains(node)) node = editor;
+    if (node.nodeType === 3) node = node.parentElement;
+    const family = getComputedStyle(node).fontFamily.split(',')[0] || '';
+    return family.replace(/["']/g, '').trim();
+  }
+
+  function closeFontList() {
+    fontPop.hidden = true;
+    fontBtn.setAttribute('aria-expanded', 'false');
+  }
+
+  function pickFont(name) {
+    editor.focus();
+    document.execCommand('fontName', false, name);
+    closeFontList();
+    saveCurrent(); updateToolbar(); persist();
+  }
+
+  function fontItem(name, mine) {
+    const li = document.createElement('li');
+    li.dataset.font = name;
+    li.setAttribute('role', 'option');
+    li.style.fontFamily = `"${name}"`;
+    const label = document.createElement('span');
+    label.textContent = name;
+    li.appendChild(label);
+    if (mine) {
+      li.classList.add('mine');
+      const rm = document.createElement('button');
+      rm.className = 'rm';
+      rm.textContent = '\u00d7';
+      rm.title = 'Remove from my fonts';
+      rm.addEventListener('mousedown', (e) => e.preventDefault());
+      rm.addEventListener('click', (e) => {
+        e.stopPropagation();
+        state.myFonts = state.myFonts.filter((f) => f !== name);
+        buildFontList(); persist();
+      });
+      li.appendChild(rm);
+    }
+    li.addEventListener('mousedown', (e) => e.preventDefault()); // keep the text selection
+    li.addEventListener('click', () => pickFont(name));
+    return li;
+  }
+
+  function heading(text) {
+    const li = document.createElement('li');
+    li.className = 'heading';
+    li.textContent = text;
+    return li;
+  }
+
+  function buildFontList() {
+    fontList.textContent = '';
+    state.myFonts.forEach(loadGoogleFont);
+    if (state.myFonts.length) {
+      fontList.appendChild(heading('My Google Fonts'));
+      state.myFonts.forEach((n) => fontList.appendChild(fontItem(n, true)));
+      fontList.appendChild(heading('On this computer'));
+    }
+    FONT_CANDIDATES.filter(fontInstalled).forEach((n) => fontList.appendChild(fontItem(n, false)));
+    updateToolbar();
+  }
+
+  fontAdd.addEventListener('keydown', (e) => {
+    e.stopPropagation();
+    fontAdd.classList.remove('bad');
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    const name = fontAdd.value.trim().replace(/\s+/g, ' ');
+    if (!validFontName(name)) { fontAdd.classList.add('bad'); return; }
+    if (!state.myFonts.some((f) => f.toLowerCase() === name.toLowerCase())) state.myFonts.push(name);
+    fontAdd.value = '';
+    buildFontList(); persist();
+  });
+
+  fontBtn.addEventListener('mousedown', (e) => e.preventDefault());
+  fontBtn.addEventListener('click', () => {
+    const open = fontPop.hidden;
+    fontPop.hidden = !open;
+    fontBtn.setAttribute('aria-expanded', String(open));
+  });
+  document.addEventListener('mousedown', (e) => {
+    if (!fontPop.hidden && !e.target.closest('#font-pop, #font-btn')) closeFontList();
+  });
+
   function setPanel(open) {
     state.inspectorOpen = open;
     frame.classList.toggle('panel-open', open);
@@ -184,6 +301,9 @@
   function updateToolbar() {
     const sel = document.getSelection();
     if (!sel.rangeCount || !editor.contains(sel.anchorNode)) return;
+    const font = currentFont();
+    if (font) fontBtn.textContent = font;
+    fontList.querySelectorAll('li[data-font]').forEach((li) => li.classList.toggle('on', li.dataset.font === font));
     let block = (document.queryCommandValue('formatBlock') || '').toLowerCase();
     if (block === '' || block === 'div') block = 'p';
     panel.querySelectorAll('button[data-cmd]').forEach((b) => {
@@ -202,7 +322,7 @@
       saveCurrent(); updateCount(); updateToolbar(); persist();
     });
   });
-  $('#collapse').addEventListener('click', () => setPanel(false));
+  $('#collapse').addEventListener('click', () => { closeFontList(); setPanel(false); });
   fab.addEventListener('click', () => setPanel(true));
   document.addEventListener('selectionchange', updateToolbar);
 
@@ -238,15 +358,16 @@
   (async () => {
     const saved = await window.desk.loadState();
     if (saved && Array.isArray(saved.tabs) && saved.tabs.length) {
-      state = { inspectorOpen: true, ...saved };
+      state = { inspectorOpen: true, myFonts: [], ...saved };
       if (!activeTab()) state.active = state.tabs[0].id;
     } else {
       const t = blankTab();
-      state = { tabs: [t], active: t.id, inspectorOpen: true };
+      state = { tabs: [t], active: t.id, inspectorOpen: true, myFonts: [] };
     }
     editor.innerHTML = activeTab().html || '';
     renderTabs();
     updateCount();
+    buildFontList();
     setPanel(state.inspectorOpen);
     editor.focus();
   })();

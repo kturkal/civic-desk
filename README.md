@@ -22,6 +22,7 @@ Requires [Bun](https://bun.sh). Built with Electron; tested on macOS. The first 
 | Close tab | `x` on the tab or `Cmd+W` |
 | Jump to tab | `Cmd+1` to `Cmd+9` |
 | Cycle tabs | `Ctrl+Tab` / `Ctrl+Shift+Tab` |
+| Font | Format panel, Font picker. Add any Google Font by name at the bottom of the list; your saved ones are pinned at the top |
 | Format | The panel on the right: styles, bold/italic/underline, lists, alignment, undo. Collapse it to a circle, reopen with `Aa` or `Cmd+\` |
 
 ## Where your writing lives
