@@ -236,6 +236,7 @@
     @media (prefers-color-scheme: dark) { #__layout .panel, #__layout .viewer { background: #151b22; color: #e8eef5; } }
     #__layout .panel { left: 18px; bottom: 18px; width: 310px; max-height: 60vh; display: flex; flex-direction: column; }
     #__layout .head { display: flex; justify-content: space-between; align-items: baseline; font-weight: 700; color: ${INK}; margin-bottom: 4px; }
+    #__layout .head span:last-child { font-weight: 400; font-size: 10px; opacity: .6; }
     #__layout .hint { opacity: .65; margin-bottom: 8px; line-height: 1.4; }
     #__layout .list { overflow-y: auto; margin-bottom: 8px; min-height: 0; }
     #__layout .item { padding: 6px 0; border-top: 1px solid rgba(128,128,128,.25); }
@@ -307,7 +308,26 @@
     // Control panel
     ui.panel = el('div', 'panel hud');
     const head = el('div', 'head');
-    head.append(el('span', null, 'Layout'), el('span', null, ''));
+    head.append(el('span', null, 'Layout'), el('span', null, 'drag to move'));
+    head.style.cursor = 'grab';
+    head.style.userSelect = 'none';
+    head.addEventListener('pointerdown', (ev) => {
+      // Move the panel out of the way of whatever you're editing.
+      ev.preventDefault();
+      const r = ui.panel.getBoundingClientRect();
+      const dx = ev.clientX - r.left, dy = ev.clientY - r.top;
+      const move = (e) => {
+        ui.panel.style.left = `${Math.max(0, Math.min(window.innerWidth - r.width, e.clientX - dx))}px`;
+        ui.panel.style.top = `${Math.max(0, Math.min(window.innerHeight - 40, e.clientY - dy))}px`;
+        ui.panel.style.bottom = 'auto';
+      };
+      const up = () => {
+        window.removeEventListener('pointermove', move, true);
+        window.removeEventListener('pointerup', up, true);
+      };
+      window.addEventListener('pointermove', move, true);
+      window.addEventListener('pointerup', up, true);
+    });
     ui.hint = el('div', 'hint', 'Click an element. Drag pink to resize, green for padding, orange for corners. ↑ selects the parent, Cmd+Z undoes, Esc exits.');
     ui.list = el('div', 'list');
     ui.btns = el('div', 'btns');
