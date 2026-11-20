@@ -41,7 +41,7 @@ To change the icon, replace `build/icon.svg` and run `bunx electron scripts/rend
 
 Edit the UI visually instead of describing it in words. Run Desk from source (`bun run start`) and press `Cmd+L` (or **Studio > Studio Mode**), or press and hold any component for 4 seconds.
 
-- Click any element. Drag the pink handles to resize, the green ones for padding, the orange one for corner radius. `Up` selects the parent, `Cmd+Z` undoes, `Esc` exits.
+- Click any element. Drag the pink handles to resize (hold `Shift` to keep the proportions, so a circle stays a circle), the green ones for padding, the orange one for corner radius. Press `Delete` (or **Delete element**) to remove the selected element. `Up` selects the parent, `Cmd+Z` undoes, `Esc` exits.
 - Studio records exact before/after values and finds likely source lines, then writes `.studio/brief.md` with before and after screenshots. **View brief** shows it.
 - **Send to agent** runs Claude Code in the project (`claude -p`, limited to Read/Edit/Glob/Grep) on that brief. It only runs when the git tree is clean, so the agent's edits show up as their own diff.
 - The brief file is always there, so you can also point your own agent session at `.studio/brief.md`.

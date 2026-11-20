@@ -22,9 +22,22 @@ function buildBrief(data) {
   out.push('- Look at the screenshots to understand the intent, then reply with a short summary of what you changed and anything you were unsure about.');
   out.push('');
   changes.forEach((c, i) => {
-    out.push(`## ${i + 1}. ${c.label}`);
+    out.push(`## ${i + 1}. ${c.removed ? 'Remove: ' : ''}${c.label}`);
     out.push('');
     out.push(`Selector: \`${c.selector}\``);
+    if (c.removed) {
+      out.push('');
+      out.push(`**Delete this element from the UI**${c.childCount ? ` (it contains ${c.childCount} inner elements, which go with it)` : ''}. Remove it from the markup or component, along with any styles or code that exist only for it. If it is rendered by a loop or condition, remove the right thing and say what you did. If it appears in other places or is shared, tell me instead of guessing.`);
+      out.push('');
+      if (c.sources?.length) {
+        out.push('Likely source:');
+        for (const s of c.sources) out.push(`- \`${s.file}:${s.line}\` (${s.kind}) \`${s.text.replace(/`/g, "'")}\``);
+      } else {
+        out.push('Likely source: not found by search. Look for the selector or its classes.');
+      }
+      out.push('');
+      return;
+    }
     if (c.sharedCount > 1) out.push(`Shared: ${c.sharedCount} elements on this page match these classes. The edit was made to one of them.`);
     if (c.boxSizing) out.push(`Box sizing: \`${c.boxSizing}\``);
     out.push('');

@@ -165,15 +165,17 @@
   function activeEdits() {
     const list = [];
     for (const [el, e] of edits) {
-      if (!el.isConnected) continue;
-      const rows = diffFor(el, e);
-      if (rows.length) list.push({ el, e, rows });
+      if (!el.isConnected && !e.removed) continue;
+      const rows = e.removed ? [] : diffFor(el, e);
+      if (rows.length || e.removed) list.push({ el, e, rows });
     }
     return list;
   }
 
   function collectChanges() {
     return activeEdits().map(({ el, e, rows }) => ({
+      removed: !!e.removed,
+      childCount: e.childCount || 0,
       label: label(el),
       selector: cssPath(el),
       tag: el.tagName.toLowerCase(),
@@ -187,7 +189,22 @@
 
   function snapshot(el) {
     const e = edits.get(el);
-    history.push({ el, css: el.style.cssText, touched: new Set(e ? e.touched : []), had: !!e });
+    history.push({ el, css: el.style.cssText, touched: new Set(e ? e.touched : []), had: !!e, removed: !!(e && e.removed) });
+  }
+
+  // Deleting hides the element (so the app keeps running and it can be undone) and
+  // records it in the brief as "remove this element from the source".
+  function deleteSelected() {
+    const target = selEl;
+    if (!target || !target.isConnected) return;
+    snapshot(target);
+    const e = ensureEdit(target);
+    e.removed = true;
+    e.childCount = target.querySelectorAll('*').length;
+    target.style.setProperty('display', 'none', 'important');
+    selEl = null;
+    childStack = [];
+    renderList();
   }
 
   function undo() {
@@ -196,7 +213,7 @@
     h.el.style.cssText = h.css;
     const e = edits.get(h.el);
     if (!h.had) edits.delete(h.el);
-    else if (e) e.touched = h.touched;
+    else if (e) { e.touched = h.touched; e.removed = h.removed; }
     renderList();
   }
 
@@ -328,14 +345,15 @@
       window.addEventListener('pointermove', move, true);
       window.addEventListener('pointerup', up, true);
     });
-    ui.hint = el('div', 'hint', 'Click an element. Drag pink to resize, green for padding, orange for corners. ↑ selects the parent, Cmd+Z undoes, Esc exits.');
+    ui.hint = el('div', 'hint', 'Click an element. Drag pink to resize (hold Shift to keep proportions), green for padding, orange for corners. Delete removes it. ↑ selects the parent, Cmd+Z undoes, Esc exits.');
     ui.list = el('div', 'list');
     ui.btns = el('div', 'btns');
+    ui.deleteBtn = button('Delete element', '', deleteSelected);
     ui.viewBtn = button('View brief', '', viewBrief);
     ui.sendBtn = button('Send to agent', 'primary', sendClick);
     ui.resetBtn = button('Reset all', '', () => { resetAll(); setStatus(''); });
     ui.doneBtn = button('Done', '', exit);
-    ui.btns.append(ui.viewBtn, ui.sendBtn, ui.resetBtn, ui.doneBtn);
+    ui.btns.append(ui.deleteBtn, ui.viewBtn, ui.sendBtn, ui.resetBtn, ui.doneBtn);
     ui.status = el('div', 'status');
     ui.panel.append(head, ui.hint, ui.list, ui.btns, ui.status);
     root.appendChild(ui.panel);
@@ -352,7 +370,7 @@
     if (!list.length) {
       ui.list.appendChild(el('div', 'hint', 'No changes yet.'));
     }
-    for (const { el: target, rows } of list) {
+    for (const { el: target, e, rows } of list) {
       const item = el('div', 'item');
       const title = el('b', null, '');
       title.append(el('span', null, label(target)));
@@ -361,11 +379,13 @@
       x.addEventListener('click', () => resetElement(target));
       title.appendChild(x);
       item.appendChild(title);
+      if (e.removed) item.appendChild(el('span', 'r', `Delete this element${e.childCount ? ` (and its ${e.childCount} inner elements)` : ''}`));
       for (const r of rows) item.appendChild(el('span', 'r', `${r.prop}: ${r.before} → ${r.after}`));
       ui.list.appendChild(item);
     }
     const n = list.length;
     ui.viewBtn.disabled = ui.sendBtn.disabled = n === 0;
+    ui.deleteBtn.disabled = !selEl;
   }
 
   /* ---------------- geometry / drawing ---------------- */
@@ -379,6 +399,7 @@
 
   function tick() {
     if (!on) return;
+    ui.deleteBtn.disabled = !selEl; // follows the selection
     if (hoverEl && hoverEl.isConnected && hoverEl !== selEl) {
       ui.hover.style.display = 'block';
       place(ui.hover, hoverEl.getBoundingClientRect());
@@ -418,9 +439,9 @@
     const list = activeEdits();
     while (ui.changed.children.length > list.length) ui.changed.lastChild.remove();
     while (ui.changed.children.length < list.length) ui.changed.appendChild(el('div', 'box changed'));
-    list.forEach(({ el: target }, i) => {
+    list.forEach(({ el: target, e }, i) => {
       const b = ui.changed.children[i];
-      if (target === selEl) b.style.display = 'none';
+      if (target === selEl || e.removed) b.style.display = 'none';
       else { b.style.display = 'block'; place(b, target.getBoundingClientRect()); }
     });
     raf = requestAnimationFrame(tick);
@@ -446,12 +467,44 @@
       rad: px(cs.borderTopLeftRadius), border: cs.boxSizing === 'border-box',
     };
     const size = (outer, padSum, borderSum) => (start.border ? outer : outer - padSum - borderSum);
+    const startedTouched = new Set(edits.get(target)?.touched || []);
+    const prevInline = {};
+    for (const prop of ['width', 'height']) {
+      const value = target.style.getPropertyValue(prop);
+      prevInline[prop] = value ? { value, priority: target.style.getPropertyPriority(prop) } : null;
+    }
 
     const move = (e) => {
       const dx = e.clientX - x0, dy = e.clientY - y0;
       const clamp = (v) => Math.max(0, v);
-      if (kind === 'e' || kind === 'se') setProp(target, 'width', clamp(size(start.w + dx, start.pl + start.pr, start.bx)));
-      if (kind === 's' || kind === 'se') setProp(target, 'height', clamp(size(start.h + dy, start.pt + start.pb, start.by)));
+      if (kind === 'e' || kind === 's' || kind === 'se') {
+        // Outer (border-box) size we are heading for.
+        let W = start.w + (kind === 's' ? 0 : dx);
+        let H = start.h + (kind === 'e' ? 0 : dy);
+        if (e.shiftKey && start.w > 0 && start.h > 0) {
+          // Hold Shift to keep the proportions (a circle stays a circle).
+          if (kind === 'e') H = (W * start.h) / start.w;
+          else if (kind === 's') W = (H * start.w) / start.h;
+          else {
+            const sx = W / start.w, sy = H / start.h;
+            const k = Math.abs(sx - 1) >= Math.abs(sy - 1) ? sx : sy;
+            W = start.w * k; H = start.h * k;
+          }
+        }
+        const sets = [];
+        if (kind !== 's' || e.shiftKey) sets.push(['width', clamp(size(W, start.pl + start.pr, start.bx))]);
+        if (kind !== 'e' || e.shiftKey) sets.push(['height', clamp(size(H, start.pt + start.pb, start.by))]);
+        for (const [prop, v] of sets) setProp(target, prop, v);
+        // If Shift was let go, give back the side we were only adjusting to keep proportions.
+        for (const prop of ['width', 'height']) {
+          const driven = (prop === 'width' && kind !== 's') || (prop === 'height' && kind !== 'e');
+          if (!driven && !e.shiftKey && !startedTouched.has(prop) && edits.get(target)?.touched.has(prop)) {
+            const keep = prevInline[prop];
+            if (keep) target.style.setProperty(prop, keep.value, keep.priority); else target.style.removeProperty(prop);
+            edits.get(target).touched.delete(prop);
+          }
+        }
+      }
       if (kind === 'pt') setProp(target, 'padding-top', clamp(start.pt + dy));
       if (kind === 'pb') setProp(target, 'padding-bottom', clamp(start.pb - dy));
       if (kind === 'pl') setProp(target, 'padding-left', clamp(start.pl + dx));
@@ -512,6 +565,8 @@
       if (ui.viewer) closeViewer();
       else if (selEl) selEl = null;
       else exit();
+    } else if ((e.key === 'Delete' || e.key === 'Backspace') && selEl) {
+      deleteSelected();
     } else if (e.key === 'ArrowUp' && selEl?.parentElement && selEl.parentElement !== document.body && !inRoot(selEl.parentElement)) {
       childStack.push(selEl);
       selEl = selEl.parentElement;
