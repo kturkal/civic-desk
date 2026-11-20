@@ -25,9 +25,16 @@
     return m ? m.length : 0;
   }
 
+  // Shows the total, or "N of M words" while part of the page is highlighted.
   function updateCount() {
-    const n = wordCount(editor.innerText);
-    countEl.textContent = `${n} word${n === 1 ? '' : 's'}`;
+    const total = wordCount(editor.innerText);
+    const sel = document.getSelection();
+    let picked = 0;
+    if (sel.rangeCount && !sel.isCollapsed && editor.contains(sel.anchorNode) && editor.contains(sel.focusNode)) {
+      picked = wordCount(sel.toString());
+    }
+    const unit = `word${total === 1 ? '' : 's'}`;
+    countEl.textContent = picked ? `${picked} of ${total} ${unit}` : `${total} ${unit}`;
   }
 
   function focusEditorEnd() {
@@ -336,7 +343,7 @@
   });
   $('#collapse').addEventListener('click', () => { closeFontList(); setPanel(false); });
   fab.addEventListener('click', () => setPanel(true));
-  document.addEventListener('selectionchange', updateToolbar);
+  document.addEventListener('selectionchange', () => { updateToolbar(); updateCount(); });
 
   /* ---------- Editor, window, shortcuts ---------- */
 
