@@ -72,7 +72,10 @@ html, body {
   background: var(--paper);
   border-color: var(--civic-blue);
 }
+.tab:focus-visible { outline: 2px solid var(--civic-blue); outline-offset: 2px; }
 .tab .title { outline: none; min-width: 20px; }
+.tab.renaming .title { min-width: 80px; border-bottom: 2px solid var(--civic-blue); }
+.tab.renaming .title:empty::before { content: "Name this tab"; color: var(--muted); }
 .tab .x {
   width: 18px; height: 18px; border-radius: 50%;
   display: grid; place-items: center;
@@ -89,23 +92,9 @@ html, body {
 }
 #new-tab:hover { background: var(--civic-blue); color: #fff; }
 
-/* Formatting toolbar */
-#toolbar {
-  display: flex; align-items: center; gap: 4px;
-  padding: 8px 26px;
-  border-bottom: 1px solid var(--hover);
-}
-#toolbar button {
-  height: 28px; padding: 0 10px;
-  border-radius: 999px; border: 0;
-  background: transparent; color: var(--ink);
-  font-size: 12px; cursor: pointer;
-}
-#toolbar button:hover { background: var(--hover); }
-.sep { width: 1px; height: 16px; background: var(--hover); margin: 0 6px; }
-
 /* Page */
-#page-wrap { flex: 1; overflow-y: auto; padding: 36px 26px 20px; }
+#page-wrap { flex: 1; overflow-y: auto; padding: 36px 26px 20px; transition: padding-right .2s ease; }
+#frame.panel-open #page-wrap { padding-right: 306px; }
 #editor {
   max-width: 720px; margin: 0 auto; min-height: 100%;
   outline: none; font-family: Georgia, "Iowan Old Style", serif;
@@ -125,3 +114,52 @@ html, body {
   padding: 8px 34px 18px;
   font-size: 12px; color: var(--muted);
 }
+
+/* Format panel: same border, same rounding as the window. */
+.round {
+  border: var(--border) solid var(--civic-blue);
+  background: var(--paper); color: var(--civic-blue);
+  border-radius: 50%; cursor: pointer;
+  font-family: inherit; font-weight: 700;
+}
+.round:hover { background: var(--civic-blue); color: #fff; }
+
+#fab {
+  position: absolute; top: 76px; right: 16px;
+  width: 54px; height: 54px; font-size: 15px;
+}
+#fab[hidden], #panel[hidden] { display: none; }
+
+#panel {
+  position: absolute; top: 76px; right: 16px; bottom: 56px;
+  width: 262px; overflow-y: auto;
+  padding: 20px 22px 22px;
+  background: var(--paper);
+  border: var(--border) solid var(--civic-blue);
+  border-radius: var(--radius);
+  scrollbar-width: none;
+}
+#panel::-webkit-scrollbar { display: none; }
+#panel[hidden] { display: none; }
+
+.panel-head {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 12px;
+  font-size: 13px; font-weight: 700; color: var(--civic-blue);
+}
+.round.small { width: 30px; height: 30px; border-width: 3px; font-size: 18px; line-height: 1; padding: 0 0 2px; }
+
+.group { margin-bottom: 16px; }
+.label { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin-bottom: 6px; }
+.row { display: flex; flex-wrap: wrap; gap: 6px; }
+.stack { display: flex; flex-direction: column; gap: 4px; }
+
+#panel .group button {
+  height: 30px; padding: 0 12px;
+  border-radius: 999px; border: 2px solid transparent;
+  background: var(--bar); color: var(--ink);
+  font-size: 12px; cursor: pointer; text-align: left;
+}
+#panel .row button { text-align: center; }
+#panel .group button:hover { background: var(--hover); }
+#panel .group button.on { border-color: var(--civic-blue); color: var(--civic-blue); background: var(--paper); }

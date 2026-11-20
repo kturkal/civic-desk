@@ -17,12 +17,12 @@ Requires [Bun](https://bun.sh). Built with Electron; tested on macOS. The first 
 
 | Action | How |
 | --- | --- |
-| New tab | `+` button or `Cmd+T` |
+| New tab | `+` or `Cmd+T`, type its name, press `Enter`, then write |
+| Rename tab | Select a tab and press `Enter`, or double-click its title |
 | Close tab | `x` on the tab or `Cmd+W` |
-| Rename tab | Double-click its title |
 | Jump to tab | `Cmd+1` to `Cmd+9` |
 | Cycle tabs | `Ctrl+Tab` / `Ctrl+Shift+Tab` |
-| Format | Toolbar: bold, italic, headings, lists, quote |
+| Format | The panel on the right: styles, bold/italic/underline, lists, alignment, undo. Collapse it to a circle, reopen with `Aa` or `Cmd+\` |
 
 ## Where your writing lives
 

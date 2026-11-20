@@ -8,7 +8,7 @@
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <div id="frame">
+  <div id="frame" class="panel-open">
     <header id="tabbar">
       <div class="lights">
         <button class="light close" id="btn-close" aria-label="Close"></button>
@@ -18,22 +18,67 @@
       <div id="tabs" role="tablist"></div>
       <button id="new-tab" aria-label="New tab" title="New tab (Cmd+T)">+</button>
     </header>
-    <div id="toolbar">
-      <button data-cmd="bold" title="Bold (Cmd+B)"><b>B</b></button>
-      <button data-cmd="italic" title="Italic (Cmd+I)"><i>I</i></button>
-      <span class="sep"></span>
-      <button data-cmd="formatBlock" data-val="h1">H1</button>
-      <button data-cmd="formatBlock" data-val="h2">H2</button>
-      <button data-cmd="formatBlock" data-val="p">Text</button>
-      <span class="sep"></span>
-      <button data-cmd="insertUnorderedList">&bull; List</button>
-      <button data-cmd="insertOrderedList">1. List</button>
-      <button data-cmd="formatBlock" data-val="blockquote">&ldquo; Quote</button>
-    </div>
+
     <main id="page-wrap">
       <article id="editor" contenteditable="true" spellcheck="true" data-placeholder="Start writing..."></article>
     </main>
+
     <footer id="status"><span id="count">0 words</span></footer>
+
+    <!-- Collapsed: a circle. Open: a panel. Both share the civic blue border. -->
+    <button id="fab" class="round" aria-label="Open format panel" title="Format">Aa</button>
+
+    <aside id="panel" aria-label="Format">
+      <div class="panel-head">
+        <span>Format</span>
+        <button id="collapse" class="round small" aria-label="Collapse format panel" title="Collapse">&rsaquo;</button>
+      </div>
+
+      <div class="group">
+        <div class="label">Style</div>
+        <div class="stack">
+          <button data-cmd="formatBlock" data-val="h1">Title</button>
+          <button data-cmd="formatBlock" data-val="h2">Heading</button>
+          <button data-cmd="formatBlock" data-val="p">Body</button>
+          <button data-cmd="formatBlock" data-val="blockquote">Quote</button>
+        </div>
+      </div>
+
+      <div class="group">
+        <div class="label">Text</div>
+        <div class="row">
+          <button data-cmd="bold" title="Bold"><b>B</b></button>
+          <button data-cmd="italic" title="Italic"><i>I</i></button>
+          <button data-cmd="underline" title="Underline"><u>U</u></button>
+          <button data-cmd="strikeThrough" title="Strikethrough"><s>S</s></button>
+        </div>
+      </div>
+
+      <div class="group">
+        <div class="label">Lists</div>
+        <div class="row">
+          <button data-cmd="insertUnorderedList" title="Bulleted list">&bull; List</button>
+          <button data-cmd="insertOrderedList" title="Numbered list">1. List</button>
+        </div>
+      </div>
+
+      <div class="group">
+        <div class="label">Align</div>
+        <div class="row">
+          <button data-cmd="justifyLeft" title="Align left">Left</button>
+          <button data-cmd="justifyCenter" title="Center">Center</button>
+          <button data-cmd="justifyRight" title="Align right">Right</button>
+        </div>
+      </div>
+
+      <div class="group">
+        <div class="label">History</div>
+        <div class="row">
+          <button data-cmd="undo" title="Undo">Undo</button>
+          <button data-cmd="redo" title="Redo">Redo</button>
+        </div>
+      </div>
+    </aside>
   </div>
   <script src="renderer.js"></script>
 </body>
