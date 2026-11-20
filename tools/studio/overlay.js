@@ -613,9 +613,11 @@
 
   /* ---------------- mode ---------------- */
 
-  async function enter(initial) {
+  // `preShot` is a screenshot already in flight (the long press takes it early so
+  // the overlay can appear exactly when the hold completes).
+  async function enter(initial, preShot) {
     if (on) return;
-    try { beforeShot = await bridge.capture('before'); } catch { beforeShot = null; }
+    try { beforeShot = await (preShot || bridge.capture('before')); } catch { beforeShot = null; }
     collectRootVars();
     on = true;
     buildUI();
@@ -663,6 +665,13 @@
     hold = { x: e.clientX, y: e.clientY, target, ring: null };
     hold.hintTimer = setTimeout(() => {
       if (!hold || !target.isConnected) return;
+      // Take the "before" screenshot now, while nothing of Studio is on screen yet.
+      const mine = hold;
+      mine.pre = bridge.capture('before').catch(() => null);
+      mine.pre.then(() => { if (hold === mine) showRing(); });
+    }, HINT_AFTER_MS);
+    function showRing() {
+      if (!hold || !target.isConnected) return;
       const ring = document.createElement('div');
       const r = target.getBoundingClientRect();
       ring.style.cssText = `position:fixed;z-index:2147483646;pointer-events:none;left:${r.left}px;top:${r.top}px;` +
@@ -676,11 +685,12 @@
       }
       document.body.appendChild(ring);
       hold.ring = ring;
-    }, HINT_AFTER_MS);
+    }
     hold.timer = setTimeout(() => {
       const t = hold && hold.target;
+      const pre = hold && hold.pre;
       cancelHold();
-      if (t && t.isConnected) enter(t);
+      if (t && t.isConnected) enter(t, pre);
     }, HOLD_MS);
   }
 
