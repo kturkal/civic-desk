@@ -397,6 +397,14 @@
 
   window.addEventListener('beforeunload', () => { saveCurrent(); window.desk.saveState(state); });
 
+  // Dev-only: load the Layout overlay when the main process enables it.
+  window.layoutBridge.config().then((c) => {
+    if (!c.enabled) return;
+    const el = document.createElement('script');
+    el.src = '../tools/layout/overlay.js';
+    document.head.appendChild(el);
+  }).catch(() => {});
+
   // Boot: blank by default
   (async () => {
     const saved = await window.desk.loadState();
