@@ -8,7 +8,9 @@ const path = require('path');
 const root = path.join(__dirname, '..');
 
 function run(cmd, args) {
-  const child = spawn(cmd, args, { stdio: 'inherit', cwd: root });
+  // The renamed Desk.app copy makes Electron think it is a packaged app, so say explicitly
+  // that this is a dev run (that is what turns Studio on).
+  const child = spawn(cmd, args, { stdio: 'inherit', cwd: root, env: { ...process.env, DESK_STUDIO: '1' } });
   child.on('exit', (code) => process.exit(code ?? 0));
 }
 
