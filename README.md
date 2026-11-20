@@ -7,11 +7,11 @@ It starts **blank**. Your tabs and text are saved on your own machine, never in 
 ## Run it
 
 ```bash
-npm install
-npm start
+bun install
+bun run start
 ```
 
-Requires [Node.js](https://nodejs.org). Built with Electron; tested on macOS.
+Requires [Bun](https://bun.sh). Built with Electron; tested on macOS. The first launch downloads the Electron binary, so give it a moment.
 
 ## Use it
 
