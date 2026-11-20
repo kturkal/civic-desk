@@ -28,6 +28,7 @@ This creates `out/Desk-darwin-arm64/Desk.app`. Drag it to your Applications fold
 | New tab | `+` or `Cmd+T`, type its name, press `Enter`, then write |
 | Rename tab | Select a tab and press `Enter`, or double-click its title |
 | Close tab | `x` on the tab or `Cmd+W` |
+| Default font | The last font you pick becomes the starting font for every new tab |
 | Move between tabs | With a tab selected, `Left` / `Right` arrows (`Home` / `End` for first / last) |
 | Jump to tab | `Cmd+1` to `Cmd+9` |
 | Cycle tabs | `Ctrl+Tab` / `Ctrl+Shift+Tab` |

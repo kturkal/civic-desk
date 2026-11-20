@@ -7,11 +7,12 @@
   const panel = $('#panel');
   const fab = $('#fab');
 
-  let state = { tabs: [], active: null, inspectorOpen: true, myFonts: [] };
+  let state = { tabs: [], active: null, inspectorOpen: true, myFonts: [], defaultFont: null };
   let saveTimer = null;
 
   const uid = () => Math.random().toString(36).slice(2, 10);
-  const blankTab = (title = 'Untitled') => ({ id: uid(), title, html: '' });
+  // New tabs start in the font you last picked.
+  const blankTab = (title = 'Untitled') => ({ id: uid(), title, html: '', font: state.defaultFont || null });
 
   function persist() {
     clearTimeout(saveTimer);
@@ -35,6 +36,13 @@
     }
     const unit = `word${total === 1 ? '' : 's'}`;
     countEl.textContent = picked ? `${picked} of ${total} ${unit}` : `${total} ${unit}`;
+  }
+
+  // Each tab has a base font (the default when it was created). Fonts applied to
+  // selected text still win over it.
+  function applyTabFont() {
+    const f = activeTab()?.font;
+    editor.style.fontFamily = f ? `"${f.replace(/"/g, '')}", Georgia, serif` : '';
   }
 
   function focusEditorEnd() {
@@ -145,6 +153,7 @@
       saveCurrent();
       state.active = id;
       editor.innerHTML = activeTab()?.html || '';
+      applyTabFont();
       pendingFont = null;
       renderTabs();
       updateCount();
@@ -238,6 +247,7 @@
     editor.focus();
     document.execCommand('fontName', false, name);
     pendingFont = name;
+    state.defaultFont = name; // remembered for the next tab you create
     closeFontList();
     saveCurrent(); updateToolbar(); persist();
   }
@@ -391,13 +401,14 @@
   (async () => {
     const saved = await window.desk.loadState();
     if (saved && Array.isArray(saved.tabs) && saved.tabs.length) {
-      state = { inspectorOpen: true, myFonts: [], ...saved };
+      state = { inspectorOpen: true, myFonts: [], defaultFont: null, ...saved };
       if (!activeTab()) state.active = state.tabs[0].id;
     } else {
       const t = blankTab();
-      state = { tabs: [t], active: t.id, inspectorOpen: true, myFonts: [] };
+      state = { tabs: [t], active: t.id, inspectorOpen: true, myFonts: [], defaultFont: null };
     }
     editor.innerHTML = activeTab().html || '';
+    applyTabFont();
     renderTabs();
     updateCount();
     buildFontList();
