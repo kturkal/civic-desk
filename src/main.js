@@ -1,6 +1,7 @@
 const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const { installedFamilies } = require('./fonts');
 
 // Your tabs and text live in your user-data folder, never in this repo.
 const stateFile = () => path.join(app.getPath('userData'), 'workspace.json');
@@ -35,6 +36,8 @@ ipcMain.handle('state:save', (_e, state) => {
   fs.mkdirSync(path.dirname(stateFile()), { recursive: true });
   fs.writeFileSync(stateFile(), JSON.stringify(state));
 });
+
+ipcMain.handle('fonts:installed', () => installedFamilies());
 
 ipcMain.on('win:close', (e) => BrowserWindow.fromWebContents(e.sender)?.close());
 ipcMain.on('win:minimize', (e) => BrowserWindow.fromWebContents(e.sender)?.minimize());

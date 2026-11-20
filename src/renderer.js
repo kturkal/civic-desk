@@ -178,6 +178,7 @@
   const fontPop = $('#font-pop');
   const fontList = $('#font-list');
   const fontAdd = $('#font-add');
+  let installedFonts = []; // fonts you installed yourself (Font Book), read from disk
 
   // Your saved Google Fonts live in your own user-data file, never in the repo.
   const validFontName = (n) => /^[A-Za-z0-9][A-Za-z0-9 ]{0,60}$/.test(n);
@@ -223,7 +224,7 @@
     const li = document.createElement('li');
     li.dataset.font = name;
     li.setAttribute('role', 'option');
-    li.style.fontFamily = `"${name}"`;
+    li.style.fontFamily = `"${name.replace(/"/g, '')}"`;
     const label = document.createElement('span');
     label.textContent = name;
     li.appendChild(label);
@@ -256,11 +257,16 @@
   function buildFontList() {
     fontList.textContent = '';
     state.myFonts.forEach(loadGoogleFont);
+    const hasMore = installedFonts.length || state.myFonts.length;
+    if (installedFonts.length) {
+      fontList.appendChild(heading('Installed by you'));
+      installedFonts.forEach((n) => fontList.appendChild(fontItem(n, false)));
+    }
     if (state.myFonts.length) {
       fontList.appendChild(heading('My Google Fonts'));
       state.myFonts.forEach((n) => fontList.appendChild(fontItem(n, true)));
-      fontList.appendChild(heading('On this computer'));
     }
+    if (hasMore) fontList.appendChild(heading('On this computer'));
     FONT_CANDIDATES.filter(fontInstalled).forEach((n) => fontList.appendChild(fontItem(n, false)));
     updateToolbar();
   }
@@ -368,6 +374,7 @@
     renderTabs();
     updateCount();
     buildFontList();
+    window.desk.installedFonts().then((list) => { installedFonts = list; buildFontList(); }).catch(() => {});
     setPanel(state.inspectorOpen);
     editor.focus();
   })();
