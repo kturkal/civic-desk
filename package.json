@@ -4,7 +4,7 @@
   "description": "Desk: a tabbed writing app with a civic blue frame. Blank by default; your tabs and text stay on your computer.",
   "main": "src/main.js",
   "scripts": {
-    "start": "node scripts/dev-name.js && electron .",
+    "start": "node scripts/dev.js",
     "package": "electron-packager . Desk --platform=darwin --arch=arm64 --out=out --overwrite --icon=build/icon --ignore=\"^/out\""
   },
   "license": "MIT",

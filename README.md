@@ -11,7 +11,7 @@ bun install
 bun run start
 ```
 
-Requires [Bun](https://bun.sh). Built with Electron; tested on macOS. The first launch downloads the Electron binary, so give it a moment.
+Requires [Bun](https://bun.sh). Built with Electron; tested on macOS. The first launch downloads the Electron binary and builds a private `Desk.app` copy (so the Dock and menu bar say Desk), so give it a moment.
 
 ## Build a standalone app (macOS)
 
