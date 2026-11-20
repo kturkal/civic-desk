@@ -1,0 +1,13 @@
+{
+  "name": "civic-desk",
+  "version": "0.1.0",
+  "description": "A tabbed writing desk with a civic blue frame. Blank by default; your tabs and text stay on your computer.",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^33.2.0"
+  }
+}

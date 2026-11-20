@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Civic Desk</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="frame">
+    <header id="tabbar">
+      <div class="lights">
+        <button class="light close" id="btn-close" aria-label="Close"></button>
+        <button class="light min" id="btn-min" aria-label="Minimize"></button>
+        <button class="light zoom" id="btn-zoom" aria-label="Zoom"></button>
+      </div>
+      <div id="tabs" role="tablist"></div>
+      <button id="new-tab" aria-label="New tab" title="New tab (Cmd+T)">+</button>
+    </header>
+    <div id="toolbar">
+      <button data-cmd="bold" title="Bold (Cmd+B)"><b>B</b></button>
+      <button data-cmd="italic" title="Italic (Cmd+I)"><i>I</i></button>
+      <span class="sep"></span>
+      <button data-cmd="formatBlock" data-val="h1">H1</button>
+      <button data-cmd="formatBlock" data-val="h2">H2</button>
+      <button data-cmd="formatBlock" data-val="p">Text</button>
+      <span class="sep"></span>
+      <button data-cmd="insertUnorderedList">&bull; List</button>
+      <button data-cmd="insertOrderedList">1. List</button>
+      <button data-cmd="formatBlock" data-val="blockquote">&ldquo; Quote</button>
+    </div>
+    <main id="page-wrap">
+      <article id="editor" contenteditable="true" spellcheck="true" data-placeholder="Start writing..."></article>
+    </main>
+    <footer id="status"><span id="count">0 words</span></footer>
+  </div>
+  <script src="renderer.js"></script>
+</body>
+</html>
