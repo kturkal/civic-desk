@@ -54,6 +54,8 @@ ipcMain.on('win:zoom', (e) => {
 });
 
 app.whenReady().then(() => {
+  // Dock icon while running from source (the packaged app gets it from build/icon.icns).
+  if (process.platform === 'darwin') app.dock?.setIcon(path.join(__dirname, '..', 'build', 'icon.png'));
   const layoutTool = layout.register({ app, ipcMain, BrowserWindow, root: process.env.LAYOUT_PROJECT || path.join(__dirname, '..') });
   Menu.setApplicationMenu(Menu.buildFromTemplate([
     { role: 'appMenu' },   // shows "Desk" with About, Hide, Quit

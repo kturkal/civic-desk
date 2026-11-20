@@ -5,7 +5,7 @@
   "main": "src/main.js",
   "scripts": {
     "start": "node scripts/dev-name.js && electron .",
-    "package": "electron-packager . Desk --platform=darwin --arch=arm64 --out=out --overwrite --ignore=\"^/out\""
+    "package": "electron-packager . Desk --platform=darwin --arch=arm64 --out=out --overwrite --icon=build/icon.icns --ignore=\"^/out\""
   },
   "license": "MIT",
   "devDependencies": {
