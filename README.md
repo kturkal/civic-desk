@@ -21,6 +21,8 @@ bun run package
 
 This creates `out/Desk-darwin-arm64/Desk.app`. Drag it to your Applications folder.
 
+To change the icon, replace `build/icon.svg` and run `bunx electron scripts/render-icon.js`.
+
 ## Use it
 
 | Action | How |
