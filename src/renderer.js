@@ -129,6 +129,7 @@
       saveCurrent();
       state.active = id;
       editor.innerHTML = activeTab()?.html || '';
+      pendingFont = null;
       renderTabs();
       updateCount();
       persist();
@@ -178,6 +179,9 @@
   const fontPop = $('#font-pop');
   const fontList = $('#font-list');
   const fontAdd = $('#font-add');
+  // A font chosen with just a cursor (no selection) only applies to what you type next,
+  // so remember it and show it right away instead of waiting for the first keystroke.
+  let pendingFont = null;
   let installedFonts = []; // fonts you installed yourself (Font Book), read from disk
 
   // Your saved Google Fonts live in your own user-data file, never in the repo.
@@ -200,6 +204,7 @@
   }
 
   function currentFont() {
+    if (pendingFont) return pendingFont;
     const sel = document.getSelection();
     let node = sel.anchorNode;
     if (!node || !editor.contains(node)) node = editor;
@@ -216,6 +221,7 @@
   function pickFont(name) {
     editor.focus();
     document.execCommand('fontName', false, name);
+    pendingFont = name;
     closeFontList();
     saveCurrent(); updateToolbar(); persist();
   }
@@ -334,7 +340,12 @@
 
   /* ---------- Editor, window, shortcuts ---------- */
 
-  editor.addEventListener('input', () => { saveCurrent(); updateCount(); persist(); });
+  editor.addEventListener('input', () => { pendingFont = null; saveCurrent(); updateCount(); persist(); updateToolbar(); });
+  // Moving the cursor yourself means the label should follow where you are now.
+  editor.addEventListener('mousedown', () => { pendingFont = null; });
+  editor.addEventListener('keydown', (e) => {
+    if (/^(Arrow|Home|End|Page)/.test(e.key)) pendingFont = null;
+  });
 
   $('#btn-close').addEventListener('click', () => window.desk.close());
   $('#btn-min').addEventListener('click', () => window.desk.minimize());
