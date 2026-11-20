@@ -1,4 +1,4 @@
-# Civic Desk
+# Desk
 
 A tabbed writing desk for your computer. One window, as many tabs as you need (short-form scripts, essays, grants, anything), wrapped in a 6px civic blue frame with phone-style rounded corners.
 
@@ -12,6 +12,14 @@ bun run start
 ```
 
 Requires [Bun](https://bun.sh). Built with Electron; tested on macOS. The first launch downloads the Electron binary, so give it a moment.
+
+## Build a standalone app (macOS)
+
+```bash
+bun run package
+```
+
+This creates `out/Desk-darwin-arm64/Desk.app`. Drag it to your Applications folder.
 
 ## Use it
 

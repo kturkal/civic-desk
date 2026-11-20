@@ -1,7 +1,11 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, Menu, ipcMain } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { installedFamilies } = require('./fonts');
+
+// The app is called Desk. Keep saving to the original folder so nothing is lost by the rename.
+app.setName('Desk');
+app.setPath('userData', path.join(app.getPath('appData'), 'civic-desk'));
 
 // Your tabs and text live in your user-data folder, never in this repo.
 const stateFile = () => path.join(app.getPath('userData'), 'workspace.json');
@@ -12,6 +16,7 @@ function createWindow() {
     height: 760,
     minWidth: 640,
     minHeight: 420,
+    title: 'Desk',
     frame: false,
     transparent: true,
     backgroundColor: '#00000000',
@@ -48,6 +53,11 @@ ipcMain.on('win:zoom', (e) => {
 });
 
 app.whenReady().then(() => {
+  Menu.setApplicationMenu(Menu.buildFromTemplate([
+    { role: 'appMenu' },   // shows "Desk" with About, Hide, Quit
+    { role: 'editMenu' },  // undo, redo, cut, copy, paste, select all
+    { role: 'windowMenu' },
+  ]));
   createWindow();
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

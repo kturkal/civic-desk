@@ -1,16 +1,19 @@
 {
   "name": "civic-desk",
   "version": "0.1.0",
-  "description": "A tabbed writing desk with a civic blue frame. Blank by default; your tabs and text stay on your computer.",
+  "description": "Desk: a tabbed writing app with a civic blue frame. Blank by default; your tabs and text stay on your computer.",
   "main": "src/main.js",
   "scripts": {
-    "start": "electron ."
+    "start": "node scripts/dev-name.js && electron .",
+    "package": "electron-packager . Desk --platform=darwin --arch=arm64 --out=out --overwrite --ignore=\"^/out\""
   },
   "license": "MIT",
   "devDependencies": {
+    "@electron/packager": "^20.3.0",
     "electron": "^45.4.1"
   },
   "trustedDependencies": [
     "electron"
-  ]
+  ],
+  "productName": "Desk"
 }
