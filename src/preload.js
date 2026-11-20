@@ -9,11 +9,11 @@ contextBridge.exposeInMainWorld('desk', {
   zoom: () => ipcRenderer.send('win:zoom'),
 });
 
-// Layout (dev-only visual editing tool). Inert unless main enables it.
-contextBridge.exposeInMainWorld('layoutBridge', {
-  config: () => ipcRenderer.invoke('layout:config'),
-  capture: (name) => ipcRenderer.invoke('layout:capture', name),
-  brief: (data) => ipcRenderer.invoke('layout:brief', data),
-  send: (opts) => ipcRenderer.invoke('layout:send', opts),
-  onToggle: (cb) => ipcRenderer.on('layout:toggle', () => cb()),
+// Studio (dev-only visual editing tool). Inert unless main enables it.
+contextBridge.exposeInMainWorld('studioBridge', {
+  config: () => ipcRenderer.invoke('studio:config'),
+  capture: (name) => ipcRenderer.invoke('studio:capture', name),
+  brief: (data) => ipcRenderer.invoke('studio:brief', data),
+  send: (opts) => ipcRenderer.invoke('studio:send', opts),
+  onToggle: (cb) => ipcRenderer.on('studio:toggle', () => cb()),
 });

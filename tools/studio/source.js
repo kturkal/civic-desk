@@ -3,7 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const SKIP_DIRS = new Set(['node_modules', '.git', 'out', 'dist', 'build', '.layout', '.svelte-kit', 'coverage']);
+const SKIP_DIRS = new Set(['node_modules', '.git', 'out', 'dist', 'build', '.studio', '.svelte-kit', 'coverage']);
 const EXT = /\.(css|scss|html|svelte|vue|jsx?|tsx?)$/i;
 const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
@@ -14,7 +14,7 @@ function walk(dir, root, out = []) {
     const p = path.join(dir, e.name);
     const rel = path.relative(root, p);
     if (e.isDirectory()) {
-      if (SKIP_DIRS.has(e.name) || rel === path.join('tools', 'layout')) continue;
+      if (SKIP_DIRS.has(e.name) || rel === path.join('tools', 'studio')) continue;
       walk(p, root, out);
     } else if (EXT.test(e.name)) {
       try { if (fs.statSync(p).size < 500_000) out.push(p); } catch { /* skip */ }

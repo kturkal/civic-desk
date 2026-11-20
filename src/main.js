@@ -2,7 +2,7 @@ const { app, BrowserWindow, Menu, ipcMain } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { installedFamilies } = require('./fonts');
-const layout = require('../tools/layout/main');
+const studio = require('../tools/studio/main');
 
 // The app is called Desk. Keep saving to the original folder so nothing is lost by the rename.
 app.setName('Desk');
@@ -56,11 +56,11 @@ ipcMain.on('win:zoom', (e) => {
 app.whenReady().then(() => {
   // Dock icon while running from source (the packaged app gets it from build/icon.icns).
   if (process.platform === 'darwin') app.dock?.setIcon(path.join(__dirname, '..', 'build', 'icon.png'));
-  const layoutTool = layout.register({ app, ipcMain, BrowserWindow, root: process.env.LAYOUT_PROJECT || path.join(__dirname, '..') });
+  const studioTool = studio.register({ app, ipcMain, BrowserWindow, root: process.env.STUDIO_PROJECT || path.join(__dirname, '..') });
   Menu.setApplicationMenu(Menu.buildFromTemplate([
     { role: 'appMenu' },   // shows "Desk" with About, Hide, Quit
     { role: 'editMenu' },  // undo, redo, cut, copy, paste, select all
-    ...layoutTool.menu,    // dev-only: Layout > Layout Mode (Cmd+Shift+L)
+    ...studioTool.menu,    // dev-only: Studio > Studio Mode (Cmd+Shift+L)
     { role: 'windowMenu' },
   ]));
   createWindow();

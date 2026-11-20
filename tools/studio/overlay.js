@@ -1,17 +1,17 @@
-/* Layout: visual editing overlay.
+/* Studio: visual editing overlay.
  *
- * Toggle layout mode (Cmd+Shift+L in Desk). Click an element, drag its handles to
- * resize it, change its padding, or round its corners. Layout records exact
+ * Toggle studio mode (Cmd+L in Desk). Click an element, drag its handles to
+ * resize it, change its padding, or round its corners. Studio records exact
  * before/after values, finds likely source files, and writes a brief for a coding
- * agent (.layout/brief.md). "Send to agent" runs the agent on that brief.
+ * agent (.studio/brief.md). "Send to agent" runs the agent on that brief.
  *
- * Framework-agnostic: it only needs a `window.layoutBridge` that provides
+ * Framework-agnostic: it only needs a `window.studioBridge` that provides
  * capture(), brief(), send() and onToggle().
  */
 (() => {
-  if (window.__layoutLoaded) return;
-  window.__layoutLoaded = true;
-  const bridge = window.layoutBridge;
+  if (window.__studioLoaded) return;
+  window.__studioLoaded = true;
+  const bridge = window.studioBridge;
   if (!bridge) return;
 
   const INK = '#ff2d8a';
@@ -216,46 +216,46 @@
   /* ---------------- UI ---------------- */
 
   const CSS_TEXT = `
-    #__layout, #__layout * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif; }
-    #__layout { position: fixed; inset: 0; z-index: 2147483647; pointer-events: none; }
-    #__layout .box { position: fixed; pointer-events: none; }
-    #__layout .hover { outline: 1.5px dashed ${INK}; outline-offset: -1px; background: rgba(255,45,138,.06); }
-    #__layout .sel { outline: 2px solid ${INK}; outline-offset: -1px; }
-    #__layout .changed { outline: 2px solid ${INK}; outline-offset: 1px; }
-    #__layout .pad { position: absolute; background: rgba(34,197,94,.22); pointer-events: none; }
-    #__layout .h { position: absolute; pointer-events: auto; touch-action: none; }
-    #__layout .h.size { width: 12px; height: 12px; background: ${INK}; border: 2px solid #fff; border-radius: 3px; }
-    #__layout .h.padh { width: 12px; height: 12px; background: #22c55e; border: 2px solid #fff; border-radius: 50%; }
-    #__layout .h.rad { width: 12px; height: 12px; background: #f59e0b; border: 2px solid #fff; border-radius: 50%; }
-    #__layout .tag { position: absolute; left: 0; top: -22px; padding: 2px 8px; border-radius: 999px; background: ${INK}; color: #fff; font-size: 11px; white-space: nowrap; }
-    #__layout .panel, #__layout .viewer {
+    #__studio, #__studio * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif; }
+    #__studio { position: fixed; inset: 0; z-index: 2147483647; pointer-events: none; }
+    #__studio .box { position: fixed; pointer-events: none; }
+    #__studio .hover { outline: 1.5px dashed ${INK}; outline-offset: -1px; background: rgba(255,45,138,.06); }
+    #__studio .sel { outline: 2px solid ${INK}; outline-offset: -1px; }
+    #__studio .changed { outline: 2px solid ${INK}; outline-offset: 1px; }
+    #__studio .pad { position: absolute; background: rgba(34,197,94,.22); pointer-events: none; }
+    #__studio .h { position: absolute; pointer-events: auto; touch-action: none; }
+    #__studio .h.size { width: 12px; height: 12px; background: ${INK}; border: 2px solid #fff; border-radius: 3px; }
+    #__studio .h.padh { width: 12px; height: 12px; background: #22c55e; border: 2px solid #fff; border-radius: 50%; }
+    #__studio .h.rad { width: 12px; height: 12px; background: #f59e0b; border: 2px solid #fff; border-radius: 50%; }
+    #__studio .tag { position: absolute; left: 0; top: -22px; padding: 2px 8px; border-radius: 999px; background: ${INK}; color: #fff; font-size: 11px; white-space: nowrap; }
+    #__studio .panel, #__studio .viewer {
       position: fixed; pointer-events: auto; background: #fff; color: #16202b;
       border: 4px solid ${INK}; border-radius: 28px; padding: 14px 18px 16px;
       font-size: 12px; box-shadow: 0 8px 30px rgba(0,0,0,.18);
     }
-    @media (prefers-color-scheme: dark) { #__layout .panel, #__layout .viewer { background: #151b22; color: #e8eef5; } }
-    #__layout .panel { left: 18px; bottom: 18px; width: 310px; max-height: 60vh; display: flex; flex-direction: column; }
-    #__layout .head { display: flex; justify-content: space-between; align-items: baseline; font-weight: 700; color: ${INK}; margin-bottom: 4px; }
-    #__layout .head span:last-child { font-weight: 400; font-size: 10px; opacity: .6; }
-    #__layout .hint { opacity: .65; margin-bottom: 8px; line-height: 1.4; }
-    #__layout .list { overflow-y: auto; margin-bottom: 8px; min-height: 0; }
-    #__layout .item { padding: 6px 0; border-top: 1px solid rgba(128,128,128,.25); }
-    #__layout .item b { font-weight: 600; display: flex; justify-content: space-between; gap: 8px; }
-    #__layout .item span.r { opacity: .75; display: block; }
-    #__layout .item .x { border: 0; background: none; cursor: pointer; color: inherit; opacity: .6; font-size: 14px; padding: 0 4px; }
-    #__layout .btns { display: flex; flex-wrap: wrap; gap: 6px; }
-    #__layout button.b {
+    @media (prefers-color-scheme: dark) { #__studio .panel, #__studio .viewer { background: #151b22; color: #e8eef5; } }
+    #__studio .panel { left: 18px; bottom: 18px; width: 310px; max-height: 60vh; display: flex; flex-direction: column; }
+    #__studio .head { display: flex; justify-content: space-between; align-items: baseline; font-weight: 700; color: ${INK}; margin-bottom: 4px; }
+    #__studio .head span:last-child { font-weight: 400; font-size: 10px; opacity: .6; }
+    #__studio .hint { opacity: .65; margin-bottom: 8px; line-height: 1.4; }
+    #__studio .list { overflow-y: auto; margin-bottom: 8px; min-height: 0; }
+    #__studio .item { padding: 6px 0; border-top: 1px solid rgba(128,128,128,.25); }
+    #__studio .item b { font-weight: 600; display: flex; justify-content: space-between; gap: 8px; }
+    #__studio .item span.r { opacity: .75; display: block; }
+    #__studio .item .x { border: 0; background: none; cursor: pointer; color: inherit; opacity: .6; font-size: 14px; padding: 0 4px; }
+    #__studio .btns { display: flex; flex-wrap: wrap; gap: 6px; }
+    #__studio button.b {
       height: 28px; padding: 0 12px; border-radius: 999px; border: 2px solid ${INK};
       background: transparent; color: ${INK}; font-size: 12px; font-weight: 600; cursor: pointer;
     }
-    #__layout button.b:hover { background: ${INK}; color: #fff; }
-    #__layout button.b.primary { background: ${INK}; color: #fff; }
-    #__layout button.b[disabled] { opacity: .4; cursor: default; }
-    #__layout .status { margin-top: 8px; white-space: pre-wrap; line-height: 1.4; max-height: 140px; overflow-y: auto; }
-    #__layout .viewer { left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(760px, 82vw); max-height: 74vh; display: flex; flex-direction: column; }
-    #__layout .viewer pre { margin: 8px 0 10px; overflow: auto; white-space: pre-wrap; font: 11.5px/1.5 Menlo, monospace; }
-    #__layout .viewer .path { opacity: .6; font-size: 11px; }
-    #__layout.shooting .hud { display: none !important; }
+    #__studio button.b:hover { background: ${INK}; color: #fff; }
+    #__studio button.b.primary { background: ${INK}; color: #fff; }
+    #__studio button.b[disabled] { opacity: .4; cursor: default; }
+    #__studio .status { margin-top: 8px; white-space: pre-wrap; line-height: 1.4; max-height: 140px; overflow-y: auto; }
+    #__studio .viewer { left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(760px, 82vw); max-height: 74vh; display: flex; flex-direction: column; }
+    #__studio .viewer pre { margin: 8px 0 10px; overflow: auto; white-space: pre-wrap; font: 11.5px/1.5 Menlo, monospace; }
+    #__studio .viewer .path { opacity: .6; font-size: 11px; }
+    #__studio.shooting .hud { display: none !important; }
   `;
 
   function el(tag, cls, text) {
@@ -273,7 +273,7 @@
 
   function buildUI() {
     root = el('div');
-    root.id = '__layout';
+    root.id = '__studio';
     const style = document.createElement('style');
     style.textContent = CSS_TEXT;
     root.appendChild(style);
@@ -308,7 +308,7 @@
     // Control panel
     ui.panel = el('div', 'panel hud');
     const head = el('div', 'head');
-    head.append(el('span', null, 'Layout'), el('span', null, 'drag to move'));
+    head.append(el('span', null, 'Studio'), el('span', null, 'drag to move'));
     head.style.cursor = 'grab';
     head.style.userSelect = 'none';
     head.addEventListener('pointerdown', (ev) => {
@@ -613,17 +613,18 @@
 
   /* ---------------- mode ---------------- */
 
-  async function enter() {
+  async function enter(initial) {
     if (on) return;
     try { beforeShot = await bridge.capture('before'); } catch { beforeShot = null; }
     collectRootVars();
     on = true;
     buildUI();
+    if (initial && initial.isConnected) selEl = initial;
     window.addEventListener('pointermove', onMove, true);
     window.addEventListener('pointerdown', onPointerDown, true);
     window.addEventListener('keydown', onKey, true);
     for (const t of BLOCKED) window.addEventListener(t, swallow, true);
-    window.__layoutDo = { doSend }; // test hook
+    window.__studioDo = { doSend }; // test hook
     tick();
   }
 
@@ -638,6 +639,57 @@
     root?.remove();
     root = null; ui = {}; selEl = null; hoverEl = null;
   }
+
+  /* ---------------- long press (4s) opens studio mode ---------------- */
+
+  const HOLD_MS = 4000;
+  const HINT_AFTER_MS = 1000;   // a dashed outline appears so you can tell it's working
+  const MOVE_TOLERANCE = 8;     // px; moving more than this means it's a drag, not a hold
+  let hold = null;
+
+  function cancelHold() {
+    if (!hold) return;
+    clearTimeout(hold.timer);
+    clearTimeout(hold.hintTimer);
+    hold.ring?.remove();
+    hold = null;
+  }
+
+  function startHold(e) {
+    if (on || e.button !== 0 || (root && inRoot(e.target))) return;
+    const target = e.target;
+    if (!(target instanceof Element) || target === document.documentElement || target === document.body) return;
+    cancelHold();
+    hold = { x: e.clientX, y: e.clientY, target, ring: null };
+    hold.hintTimer = setTimeout(() => {
+      if (!hold || !target.isConnected) return;
+      const ring = document.createElement('div');
+      const r = target.getBoundingClientRect();
+      ring.style.cssText = `position:fixed;z-index:2147483646;pointer-events:none;left:${r.left}px;top:${r.top}px;` +
+        `width:${r.width}px;height:${r.height}px;outline:2px dashed ${INK};outline-offset:-1px;` +
+        `background:rgba(255,45,138,.08);animation:__studioPulse ${HOLD_MS - HINT_AFTER_MS}ms ease-in forwards;`;
+      if (!document.getElementById('__studioPulseStyle')) {
+        const st = document.createElement('style');
+        st.id = '__studioPulseStyle';
+        st.textContent = '@keyframes __studioPulse{from{opacity:.25}to{opacity:1}}';
+        document.head.appendChild(st);
+      }
+      document.body.appendChild(ring);
+      hold.ring = ring;
+    }, HINT_AFTER_MS);
+    hold.timer = setTimeout(() => {
+      const t = hold && hold.target;
+      cancelHold();
+      if (t && t.isConnected) enter(t);
+    }, HOLD_MS);
+  }
+
+  window.addEventListener('pointerdown', startHold, true);
+  window.addEventListener('pointerup', cancelHold, true);
+  window.addEventListener('pointercancel', cancelHold, true);
+  window.addEventListener('pointermove', (e) => {
+    if (hold && Math.hypot(e.clientX - hold.x, e.clientY - hold.y) > MOVE_TOLERANCE) cancelHold();
+  }, true);
 
   bridge.onToggle(() => (on ? exit() : enter()));
 })();

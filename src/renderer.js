@@ -397,11 +397,11 @@
 
   window.addEventListener('beforeunload', () => { saveCurrent(); window.desk.saveState(state); });
 
-  // Dev-only: load the Layout overlay when the main process enables it.
-  window.layoutBridge.config().then((c) => {
+  // Dev-only: load the Studio overlay when the main process enables it.
+  window.studioBridge.config().then((c) => {
     if (!c.enabled) return;
     const el = document.createElement('script');
-    el.src = '../tools/layout/overlay.js';
+    el.src = '../tools/studio/overlay.js';
     document.head.appendChild(el);
   }).catch(() => {});
 

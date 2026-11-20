@@ -37,16 +37,16 @@ To change the icon, replace `build/icon.svg` and run `bunx electron scripts/rend
 | Font | Format panel, Font picker. Fonts you installed yourself (e.g. via Font Book, read from `~/Library/Fonts`) are pinned at the top. You can also add any Google Font by name at the bottom of the list |
 | Format | The panel on the right: styles, bold/italic/underline, lists, alignment, undo. Collapse it to a circle, reopen with `Aa` or `Cmd+\` |
 
-## Layout (dev tool)
+## Studio (dev tool)
 
-Edit the UI visually instead of describing it in words. Run Desk from source (`bun run start`) and press `Cmd+Shift+L` (or **Layout > Layout Mode**).
+Edit the UI visually instead of describing it in words. Run Desk from source (`bun run start`) and press `Cmd+L` (or **Studio > Studio Mode**), or press and hold any component for 4 seconds.
 
 - Click any element. Drag the pink handles to resize, the green ones for padding, the orange one for corner radius. `Up` selects the parent, `Cmd+Z` undoes, `Esc` exits.
-- Layout records exact before/after values and finds likely source lines, then writes `.layout/brief.md` with before and after screenshots. **View brief** shows it.
+- Studio records exact before/after values and finds likely source lines, then writes `.studio/brief.md` with before and after screenshots. **View brief** shows it.
 - **Send to agent** runs Claude Code in the project (`claude -p`, limited to Read/Edit/Glob/Grep) on that brief. It only runs when the git tree is clean, so the agent's edits show up as their own diff.
-- The brief file is always there, so you can also point your own agent session at `.layout/brief.md`.
+- The brief file is always there, so you can also point your own agent session at `.studio/brief.md`.
 
-It is disabled in packaged builds unless `DESK_LAYOUT=1`. To point it at another project's folder, set `LAYOUT_PROJECT`.
+It is disabled in packaged builds unless `DESK_STUDIO=1`. To point it at another project's folder, set `STUDIO_PROJECT`.
 
 ## Where your writing lives
 

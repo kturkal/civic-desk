@@ -2,7 +2,7 @@
 function buildBrief(data) {
   const { root, capturedAt, viewport, shots, changes } = data;
   const out = [];
-  out.push('# Layout changes');
+  out.push('# Studio changes');
   out.push('');
   out.push(`- Project: \`${root}\``);
   out.push(`- Captured: ${capturedAt}`);
