@@ -81,6 +81,15 @@
         if (e.key === 'Enter') {
           e.preventDefault();
           startRename(t.id);
+        } else if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) {
+          // Arrow keys move between tabs and keep you in the tab bar.
+          e.preventDefault();
+          const i = state.tabs.findIndex((x) => x.id === t.id);
+          const last = state.tabs.length - 1;
+          const next = e.key === 'Home' ? 0 : e.key === 'End' ? last
+            : e.key === 'ArrowRight' ? (i + 1) % state.tabs.length : (i - 1 + state.tabs.length) % state.tabs.length;
+          switchTo(state.tabs[next].id, 'tab');
+          tabElement(state.tabs[next].id)?.scrollIntoView({ inline: 'nearest' });
         } else if (e.key.length === 1 && !e.metaKey && !e.ctrlKey && !e.altKey) {
           focusEditorEnd(); // start typing and it goes to the page
         }

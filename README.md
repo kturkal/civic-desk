@@ -28,6 +28,7 @@ This creates `out/Desk-darwin-arm64/Desk.app`. Drag it to your Applications fold
 | New tab | `+` or `Cmd+T`, type its name, press `Enter`, then write |
 | Rename tab | Select a tab and press `Enter`, or double-click its title |
 | Close tab | `x` on the tab or `Cmd+W` |
+| Move between tabs | With a tab selected, `Left` / `Right` arrows (`Home` / `End` for first / last) |
 | Jump to tab | `Cmd+1` to `Cmd+9` |
 | Cycle tabs | `Ctrl+Tab` / `Ctrl+Shift+Tab` |
 | Font | Format panel, Font picker. Fonts you installed yourself (e.g. via Font Book, read from `~/Library/Fonts`) are pinned at the top. You can also add any Google Font by name at the bottom of the list |
