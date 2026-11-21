@@ -15,7 +15,7 @@ function register({ app, ipcMain, BrowserWindow, root }) {
   if (!enabled) return { enabled, menu: [] };
 
   ipcMain.handle('studio:capture', async (e, name) => {
-    if (!['before', 'after'].includes(name)) throw new Error('bad screenshot name');
+    if (!['before', 'after', 'annotated'].includes(name)) throw new Error('bad screenshot name');
     const win = BrowserWindow.fromWebContents(e.sender);
     const img = await win.webContents.capturePage();
     fs.mkdirSync(dir, { recursive: true });
@@ -25,9 +25,19 @@ function register({ app, ipcMain, BrowserWindow, root }) {
   });
 
   ipcMain.handle('studio:brief', (_e, data) => {
-    const sources = findSources(root, data.changes.map((c) => ({ classes: c.classes, ids: c.ids })));
-    const changes = data.changes.map((c, i) => ({ ...c, sources: sources[i] }));
-    const full = { ...data, changes, root, capturedAt: new Date().toISOString() };
+    let full;
+    if (data.mode === 'draw') {
+      // Point the agent at the source of every element a mark sits on.
+      const flat = (data.annotations || []).flatMap((a) => a.targets);
+      const found = findSources(root, flat.map((x) => ({ classes: x.classes, ids: x.ids })));
+      let k = 0;
+      const annotations = (data.annotations || []).map((a) => ({ ...a, targets: a.targets.map((x) => ({ ...x, sources: found[k++] })) }));
+      full = { ...data, annotations, root, capturedAt: new Date().toISOString() };
+    } else {
+      const sources = findSources(root, data.changes.map((c) => ({ classes: c.classes, ids: c.ids })));
+      const changes = data.changes.map((c, i) => ({ ...c, sources: sources[i] }));
+      full = { ...data, changes, root, capturedAt: new Date().toISOString() };
+    }
     const markdown = buildBrief(full);
     fs.mkdirSync(dir, { recursive: true });
     const file = path.join(dir, 'brief.md');
@@ -48,7 +58,7 @@ function register({ app, ipcMain, BrowserWindow, root }) {
     if (!fs.existsSync(path.join(dir, 'brief.md'))) return resolve({ ok: false, error: 'No brief found. Open the brief first.' });
 
     const prompt = 'Read .studio/brief.md and apply the visual changes it describes to the source files, following its instructions. ' +
-      'You may look at .studio/before.png and .studio/after.png. Then reply with a short summary of what you changed and anything you were unsure about.';
+      'Look at the screenshots it lists (in .studio/, such as before.png, after.png or annotated.png). Then reply with a short summary of what you changed and anything you were unsure about.';
     const script = opts.dry
       ? 'claude --version'
       : 'claude -p "$STUDIO_PROMPT" --permission-mode acceptEdits --allowedTools Read Edit Glob Grep';

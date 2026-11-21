@@ -1,5 +1,54 @@
 // Turns recorded visual edits into a markdown brief for a coding agent.
+function buildSketchBrief(data) {
+  const { root, capturedAt, viewport, shots, notes, annotations } = data;
+  const out = [];
+  out.push('# Studio sketch');
+  out.push('');
+  out.push(`- Project: \`${root}\``);
+  out.push(`- Captured: ${capturedAt}`);
+  out.push(`- Viewport: ${viewport.w}×${viewport.h}`);
+  if (shots?.before) out.push(`- Clean screenshot of the current UI: \`${shots.before}\``);
+  if (shots?.annotated) out.push(`- Screenshot with the sketch drawn on it: \`${shots.annotated}\``);
+  out.push('');
+  out.push('## Instructions');
+  out.push('');
+  out.push('The user sketched on top of a screenshot of the running app to show the UI they want. Look at both screenshots and work out what they are asking for.');
+  out.push('');
+  out.push('- Drawn boxes, ovals and freehand shapes show the shape, size and position they want. Arrows show a move, a resize, or "this should become that". Text marks are direct instructions placed next to what they refer to. Colors only tell marks apart unless the notes say otherwise.');
+  out.push('- Coordinates below are viewport pixels in the same space as the screenshots. "Touches" lists the page elements under each mark, with the likely source lines.');
+  out.push('- Make the smallest source changes that produce what the sketch shows, in the existing rule or component. Use existing CSS variables and the existing design style (colors, border width, rounded corners) rather than raw values. Do not copy the sketch marks themselves into the UI.');
+  out.push('- If the sketch is ambiguous, pick the most likely reading, say which you chose, and do not change unrelated things.');
+  out.push('- Reply with a short summary of what you changed and what you were unsure about.');
+  out.push('');
+  if (notes) {
+    out.push('## Notes from the user');
+    out.push('');
+    for (const line of notes.split('\n')) out.push(`> ${line}`);
+    out.push('');
+  }
+  out.push('## Marks');
+  out.push('');
+  if (!annotations?.length) out.push('No marks were drawn; follow the notes above.');
+  for (const a of annotations || []) {
+    out.push(`### ${a.n}. ${a.kind}${a.filled ? ' (filled)' : ''}, ${a.color}`);
+    out.push('');
+    out.push(`Box on screen: x ${a.box.x}, y ${a.box.y}, ${a.box.w}×${a.box.h}`);
+    if (a.text) out.push(`Text: "${a.text.replace(/"/g, "'")}"`);
+    if (a.targets?.length) {
+      out.push('');
+      out.push('Touches:');
+      for (const t of a.targets) {
+        out.push(`- \`${t.selector}\` (${t.label})`);
+        for (const s of t.sources || []) out.push(`  - \`${s.file}:${s.line}\` (${s.kind}) \`${s.text.replace(/`/g, "'")}\``);
+      }
+    }
+    out.push('');
+  }
+  return out.join('\n');
+}
+
 function buildBrief(data) {
+  if (data.mode === 'draw') return buildSketchBrief(data);
   const { root, capturedAt, viewport, shots, changes } = data;
   const out = [];
   out.push('# Studio changes');

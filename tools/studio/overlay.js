@@ -35,6 +35,9 @@
   let lastSel = null;
   let shapeEl = null;      // element currently in Shape mode
   let shapeTool = 'corners';
+  let drawOn = false;      // Draw (sketch) mode
+  let drawTool = 'pen', drawColor = '#ff2d8a', drawW = 4, drawFill = false;
+  let objs = [], dUndo = [], dRedo = [], selId = null, objSeq = 0, textInput = null;
   let busy = false;        // a drag is in progress
   let idSeq = 0;
   let pending = null;      // a drawn but not yet applied cut: { p1, p2, keep }
@@ -419,6 +422,24 @@
     #__studio .shapebar { left: 50%; top: 18px; bottom: auto; transform: translateX(-50%); width: 520px; max-height: none; border-radius: 24px; padding: 10px 14px 12px; }
     #__studio .shapebar .btns { margin: 6px 0; }
     #__studio .shapebar .hint { margin: 4px 0 0; }
+    #__studio .drawlayer { user-select: none; position: fixed; inset: 0; cursor: crosshair; touch-action: none; pointer-events: auto; }
+    #__studio .drawlayer svg, #__studio .drawhud svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+    #__studio .drawhud { position: fixed; inset: 0; pointer-events: none; }
+    #__studio .drawhud svg { pointer-events: none; }
+    #__studio .drawhud .hd { pointer-events: all; cursor: move; }
+    #__studio .drawbar { left: 50%; top: 18px; bottom: auto; transform: translateX(-50%); width: 540px; max-height: none; border-radius: 24px; padding: 8px 14px 10px; user-select: none; }
+    #__studio .drawbar .btns { margin: 5px 0; align-items: center; }
+    #__studio .drawbar button.b { height: 26px; padding: 0 10px; font-size: 11.5px; }
+    #__studio .drawbar textarea {
+      width: 100%; min-height: 34px; height: 34px; resize: vertical; user-select: text; border: 2px solid ${INK}; border-radius: 14px; background: transparent;
+      color: inherit; padding: 6px 10px; font-size: 12px; margin-top: 4px;
+    }
+    #__studio .drawbar .sw { width: 20px; height: 20px; }
+    #__studio .drawbar .sw.on { border-color: ${INK}; box-shadow: 0 0 0 2px #fff, 0 0 0 4px ${INK}; }
+    #__studio .drawbar input[type=color] { width: 26px; height: 22px; padding: 0; border: 2px solid ${INK}; border-radius: 50%; background: none; cursor: pointer; }
+    #__studio .drawbar select { height: 26px; border-radius: 999px; border: 2px solid ${INK}; background: transparent; color: inherit; font-size: 11.5px; padding: 0 6px; }
+    #__studio .drawbar label { display: flex; align-items: center; gap: 4px; font-size: 11.5px; }
+    #__studio .dtext { position: fixed; z-index: 3; min-width: 120px; font: 700 20px -apple-system, sans-serif; border: 2px dashed ${INK}; background: rgba(255,255,255,.85); color: #111; padding: 2px 6px; border-radius: 8px; outline: none; pointer-events: auto; }
     #__studio.shooting .hud { display: none !important; }
   `;
 
@@ -507,17 +528,18 @@
       window.addEventListener('pointermove', move, true);
       window.addEventListener('pointerup', up, true);
     });
-    ui.hint = el('div', 'hint', 'Click an element. Drag pink to resize (hold Shift to keep proportions), green for padding, orange for corners. Delete removes it. Style opens colors and borders, Shape cuts and reshapes. ↑ selects the parent, Cmd+Z undoes, Esc exits.');
+    ui.hint = el('div', 'hint', 'Click an element. Drag pink to resize (hold Shift to keep proportions), green for padding, orange for corners. Delete removes it. Style opens colors and borders, Shape cuts and reshapes, Draw (or D) lets you sketch what you want. ↑ selects the parent, Cmd+Z undoes, Esc exits.');
     ui.list = el('div', 'list');
     ui.btns = el('div', 'btns');
     ui.deleteBtn = button('Delete element', '', deleteSelected);
     ui.viewBtn = button('View brief', '', viewBrief);
-    ui.sendBtn = button('Send to agent', 'primary', sendClick);
+    ui.sendBtn = button('Send to agent', 'primary', () => sendClick(ui.sendBtn));
     ui.resetBtn = button('Reset all', '', () => { resetAll(); setStatus(''); });
     ui.doneBtn = button('Done', '', exit);
     ui.styleBtn = button('Style ▸', '', () => toggleStylePanel());
     ui.shapeBtn = button('Shape', '', () => enterShape());
-    ui.btns.append(ui.deleteBtn, ui.styleBtn, ui.shapeBtn, ui.viewBtn, ui.sendBtn, ui.resetBtn, ui.doneBtn);
+    ui.drawBtn = button('Draw', '', () => enterDraw());
+    ui.btns.append(ui.deleteBtn, ui.styleBtn, ui.shapeBtn, ui.drawBtn, ui.viewBtn, ui.sendBtn, ui.resetBtn, ui.doneBtn);
     ui.status = el('div', 'status');
     ui.panel.append(head, ui.hint, ui.list, ui.btns, ui.status);
     root.appendChild(ui.panel);
@@ -667,7 +689,10 @@
     sp.style.transformOrigin = right ? 'left bottom' : 'right bottom';
   }
 
-  function setStatus(text) { if (ui.status) ui.status.textContent = text; }
+  function setStatus(text) {
+    if (ui.status) ui.status.textContent = text;
+    if (ui.dStatus) ui.dStatus.textContent = text;
+  }
 
   function renderList() {
     if (!ui.list) return;
@@ -709,7 +734,7 @@
   // out of the way of the shape and its handles.
   function tickCluster() {
     const c = ui.cluster;
-    const show = selEl && selEl.isConnected && !shapeEl && !busy && !ui.viewer;
+    const show = selEl && selEl.isConnected && !shapeEl && !drawOn && !busy && !ui.viewer;
     if (!show) { c.style.display = 'none'; c.dataset.for = ''; return; }
     const r = selEl.getBoundingClientRect();
     const R = 70, angles = [-50, -17, 17, 50];
@@ -736,10 +761,11 @@
   function tick() {
     if (!on) return;
     ui.deleteBtn.disabled = !selEl || !!shapeEl; // follows the selection
-    ui.shapeBtn.disabled = !selEl || !!shapeEl;
+    ui.shapeBtn.disabled = !selEl || !!shapeEl || drawOn;
+    ui.changed.style.display = drawOn ? 'none' : '';
     if (selEl !== lastSel) { lastSel = selEl; refreshStyle(); }
     placeStylePanel();
-    if (hoverEl && hoverEl.isConnected && hoverEl !== selEl) {
+    if (hoverEl && hoverEl.isConnected && hoverEl !== selEl && !drawOn) {
       ui.hover.style.display = 'block';
       place(ui.hover, hoverEl.getBoundingClientRect());
     } else {
@@ -748,7 +774,7 @@
 
     if (shapeEl) tickShape();
     tickCluster();
-    if (selEl && selEl.isConnected && !shapeEl) {
+    if (selEl && selEl.isConnected && !shapeEl && !drawOn) {
       const r = selEl.getBoundingClientRect();
       const cs = getComputedStyle(selEl);
       ui.sel.style.display = 'block';
@@ -1301,6 +1327,434 @@
     renderList();
   }
 
+  /* ---------------- draw (sketch) mode ---------------- */
+  // Sketch straight onto the running UI. The annotated screenshot, plus a list of which
+  // elements each mark sits on, goes to the agent.
+
+  const PALETTE = ['#ff2d8a', '#ef4444', '#f59e0b', '#facc15', '#22c55e', '#3b82f6', '#111827', '#ffffff'];
+  const TOOLS = [['pen', 'Pen'], ['line', 'Line'], ['arrow', 'Arrow'], ['rect', 'Box'], ['ellipse', 'Oval'], ['text', 'Text'], ['select', 'Select']];
+  const SVGNS = 'http://www.w3.org/2000/svg';
+  const mk = (name, attrs = {}) => {
+    const n = document.createElementNS(SVGNS, name);
+    for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v);
+    return n;
+  };
+  const selObj = () => objs.find((o) => o.id === selId) || null;
+  const clone = (o) => JSON.parse(JSON.stringify(o));
+
+  function pushUndo() {
+    dUndo.push(JSON.stringify(objs));
+    if (dUndo.length > 100) dUndo.shift();
+    dRedo = [];
+  }
+  function drawUndo() {
+    if (!dUndo.length) return;
+    dRedo.push(JSON.stringify(objs));
+    objs = JSON.parse(dUndo.pop());
+    syncDraw();
+  }
+  function drawRedo() {
+    if (!dRedo.length) return;
+    dUndo.push(JSON.stringify(objs));
+    objs = JSON.parse(dRedo.pop());
+    syncDraw();
+  }
+
+  function bboxOf(o) {
+    if (o.type === 'pen') {
+      const xs = o.pts.map((q) => q[0]), ys = o.pts.map((q) => q[1]);
+      return { x1: Math.min(...xs), y1: Math.min(...ys), x2: Math.max(...xs), y2: Math.max(...ys) };
+    }
+    if (o.type === 'text') return { x1: o.x, y1: o.y - o.size, x2: o.x + Math.max(20, o.text.length * o.size * 0.58), y2: o.y + o.size * 0.3 };
+    return { x1: Math.min(o.x1, o.x2), y1: Math.min(o.y1, o.y2), x2: Math.max(o.x1, o.x2), y2: Math.max(o.y1, o.y2) };
+  }
+
+  function nodeFor(o) {
+    const line = { stroke: o.color, 'stroke-width': o.width, 'stroke-linecap': 'round', 'stroke-linejoin': 'round', fill: 'none' };
+    const fill = o.fill ? { fill: o.color, 'fill-opacity': 0.22 } : {};
+    if (o.type === 'pen') {
+      return mk('path', { ...line, d: o.pts.map((q, i) => `${i ? 'L' : 'M'}${q[0]} ${q[1]}`).join(' ') + (o.pts.length === 1 ? ` L${o.pts[0][0] + 0.1} ${o.pts[0][1]}` : '') });
+    }
+    if (o.type === 'line') return mk('line', { ...line, x1: o.x1, y1: o.y1, x2: o.x2, y2: o.y2 });
+    if (o.type === 'arrow') {
+      const g = mk('g');
+      g.appendChild(mk('line', { ...line, x1: o.x1, y1: o.y1, x2: o.x2, y2: o.y2 }));
+      const th = Math.atan2(o.y2 - o.y1, o.x2 - o.x1), L = 10 + o.width * 2.5;
+      const pt = (d) => `${o.x2 - L * Math.cos(th + d)} ${o.y2 - L * Math.sin(th + d)}`;
+      g.appendChild(mk('path', { ...line, d: `M${pt(0.45)} L${o.x2} ${o.y2} L${pt(-0.45)}` }));
+      return g;
+    }
+    if (o.type === 'rect') {
+      const b = bboxOf(o);
+      return mk('rect', { ...line, ...fill, x: b.x1, y: b.y1, width: b.x2 - b.x1, height: b.y2 - b.y1, rx: 0 });
+    }
+    if (o.type === 'ellipse') {
+      const b = bboxOf(o);
+      return mk('ellipse', { ...line, ...fill, cx: (b.x1 + b.x2) / 2, cy: (b.y1 + b.y2) / 2, rx: (b.x2 - b.x1) / 2, ry: (b.y2 - b.y1) / 2 });
+    }
+    const t = mk('text', {
+      x: o.x, y: o.y, fill: o.color, 'font-size': o.size, 'font-weight': 700, 'font-family': '-apple-system, Helvetica, sans-serif',
+      stroke: '#fff', 'stroke-width': 4, 'paint-order': 'stroke', 'stroke-linejoin': 'round',
+    });
+    t.textContent = o.text;
+    return t;
+  }
+
+  const hasEnds = (o) => ['line', 'arrow', 'rect', 'ellipse'].includes(o.type);
+
+  function renderDraw() {
+    if (!ui.dsvg) return;
+    ui.dsvg.textContent = '';
+    for (const o of objs) ui.dsvg.appendChild(nodeFor(o));
+    ui.dhud.textContent = '';
+    const o = drawTool === 'select' ? selObj() : null;
+    if (!o) return;
+    const b = bboxOf(o), pad = 6;
+    ui.dhud.appendChild(mk('rect', { x: b.x1 - pad, y: b.y1 - pad, width: b.x2 - b.x1 + 2 * pad, height: b.y2 - b.y1 + 2 * pad, fill: 'none', stroke: INK, 'stroke-width': 1.5, 'stroke-dasharray': '5 3' }));
+    if (hasEnds(o)) {
+      for (const [k, x, y] of [['p1', o.x1, o.y1], ['p2', o.x2, o.y2]]) {
+        const h = mk('circle', { cx: x, cy: y, r: 7, fill: '#f59e0b', stroke: '#fff', 'stroke-width': 2, class: 'hd' });
+        h.addEventListener('pointerdown', (ev) => startEndDrag(ev, k));
+        ui.dhud.appendChild(h);
+      }
+    }
+  }
+
+  function syncDraw() {
+    if (!drawOn) return;
+    renderDraw();
+    const has = objs.length > 0 || (ui.notes && ui.notes.value.trim());
+    ui.dView.disabled = ui.dSend.disabled = !has;
+    ui.dDelete.disabled = !(selObj());
+    for (const [id, b] of Object.entries(ui.dTools)) b.classList.toggle('primary', id === drawTool);
+    ui.dSwatches.forEach((sw) => sw.classList.toggle('on', sw.dataset.c === drawColor.toLowerCase()));
+    ui.dColor.value = /^#[0-9a-f]{6}$/i.test(drawColor) ? drawColor : '#ff2d8a';
+    ui.dWidth.value = String(drawW);
+    ui.dFill.checked = drawFill;
+    ui.dLayer.style.cursor = drawTool === 'select' ? 'default' : drawTool === 'text' ? 'text' : 'crosshair';
+  }
+
+  function enterDraw() {
+    if (drawOn || shapeEl) return;
+    drawOn = true;
+    selEl = null; hoverEl = null;
+    ui.sel.style.display = 'none';
+    ui.dLayer = el('div', 'drawlayer');
+    ui.dsvg = mk('svg');
+    ui.dLayer.appendChild(ui.dsvg);
+    ui.dLayer.addEventListener('pointerdown', onDrawDown);
+    ui.dhud = null;
+    const hud = el('div', 'drawhud hud');
+    ui.dhudWrap = hud;
+    const hsvg = mk('svg');
+    hud.appendChild(hsvg);
+    ui.dhud = hsvg;
+    root.insertBefore(ui.dLayer, ui.panel);
+    root.insertBefore(hud, ui.panel);
+
+    const bar = el('div', 'panel drawbar hud');
+    ui.dBar = bar;
+    const head = el('div', 'head');
+    head.append(el('span', null, 'Sketch'), el('span', null, 'drag to move'));
+    head.style.cursor = 'grab';
+    head.addEventListener('pointerdown', (ev) => {
+      ev.preventDefault();
+      const r = bar.getBoundingClientRect();
+      const dx = ev.clientX - r.left, dy = ev.clientY - r.top;
+      bar.style.transform = 'none';
+      const move = (e) => { bar.style.left = `${Math.max(0, e.clientX - dx)}px`; bar.style.top = `${Math.max(0, e.clientY - dy)}px`; };
+      const up = () => { window.removeEventListener('pointermove', move, true); window.removeEventListener('pointerup', up, true); };
+      window.addEventListener('pointermove', move, true);
+      window.addEventListener('pointerup', up, true);
+    });
+    const tools = el('div', 'btns');
+    ui.dTools = {};
+    for (const [id, text] of TOOLS) {
+      ui.dTools[id] = button(text, '', () => { commitText(); drawTool = id; if (id !== 'select') selId = null; syncDraw(); });
+      tools.appendChild(ui.dTools[id]);
+    }
+    const opts = el('div', 'btns');
+    ui.dSwatches = PALETTE.map((c) => {
+      const b = el('button', 'sw');
+      b.dataset.c = c;
+      b.style.background = c;
+      b.title = c;
+      b.addEventListener('click', () => setDrawProp('color', c));
+      opts.appendChild(b);
+      return b;
+    });
+    ui.dColor = document.createElement('input');
+    ui.dColor.type = 'color';
+    ui.dColor.title = 'Any color';
+    ui.dColor.addEventListener('input', () => setDrawProp('color', ui.dColor.value));
+    ui.dWidth = document.createElement('select');
+    for (const [v, t] of [[2, 'Thin'], [4, 'Medium'], [8, 'Thick']]) { const o = document.createElement('option'); o.value = v; o.textContent = t; ui.dWidth.appendChild(o); }
+    ui.dWidth.addEventListener('change', () => setDrawProp('width', +ui.dWidth.value));
+    const fl = el('label');
+    ui.dFill = document.createElement('input');
+    ui.dFill.type = 'checkbox';
+    ui.dFill.addEventListener('change', () => setDrawProp('fill', ui.dFill.checked));
+    fl.append(ui.dFill, document.createTextNode('Fill'));
+    opts.append(ui.dColor, ui.dWidth, fl);
+
+    ui.notes = document.createElement('textarea');
+    ui.notes.placeholder = 'Tell the agent what you want (optional, but it helps). Sketch with the tools above; Select moves, recolors and deletes.';
+    ui.notes.addEventListener('input', syncDraw);
+
+    const acts = el('div', 'btns');
+    ui.dUndo = button('Undo', '', drawUndo);
+    ui.dDelete = button('Delete', '', deleteObj);
+    ui.dView = button('View brief', '', viewBrief);
+    ui.dSend = button('Send to agent', 'primary', () => sendClick(ui.dSend));
+    acts.append(ui.dUndo, ui.dDelete, button('Clear', '', clearDraw), ui.dView, ui.dSend, button('Done', '', exitDraw));
+    ui.dStatus = el('div', 'status');
+    bar.append(head, tools, opts, ui.notes, acts, ui.dStatus);
+    root.appendChild(bar);
+    renderList();
+    syncDraw();
+  }
+
+  function exitDraw() {
+    if (!drawOn) return;
+    commitText();
+    drawOn = false;
+    selId = null;
+    for (const k of ['dLayer', 'dhudWrap', 'dBar']) { ui[k]?.remove(); ui[k] = null; }
+    ui.dsvg = ui.dhud = ui.dStatus = null;
+    renderList();
+  }
+
+  function clearDraw() {
+    if (!objs.length) return;
+    pushUndo();
+    objs = [];
+    selId = null;
+    syncDraw();
+  }
+
+  function deleteObj() {
+    const o = selObj();
+    if (!o) return;
+    pushUndo();
+    objs = objs.filter((x) => x.id !== o.id);
+    selId = null;
+    syncDraw();
+  }
+
+  // Colour/width/fill: sets the default for new marks, and edits the selected mark in Select mode.
+  function setDrawProp(prop, value) {
+    const o = drawTool === 'select' ? selObj() : null;
+    if (o) { pushUndo(); o[prop] = value; }
+    if (prop === 'color') drawColor = value;
+    if (prop === 'width') drawW = value;
+    if (prop === 'fill') drawFill = value;
+    syncDraw();
+  }
+
+  function onDrawKey(e) {
+    if (e.key === 'Escape') {
+      if (textInput) cancelText();
+      else if (selId) { selId = null; syncDraw(); }
+      else exitDraw();
+    } else if ((e.key === 'Delete' || e.key === 'Backspace') && selObj()) deleteObj();
+    else if (selObj() && /^Arrow/.test(e.key)) {
+      const step = e.shiftKey ? 10 : 1, o = selObj();
+      pushUndo();
+      moveObj(o, e.key === 'ArrowLeft' ? -step : e.key === 'ArrowRight' ? step : 0, e.key === 'ArrowUp' ? -step : e.key === 'ArrowDown' ? step : 0);
+      syncDraw();
+    }
+  }
+
+  function moveObj(o, dx, dy) {
+    if (o.type === 'pen') o.pts = o.pts.map(([x, y]) => [x + dx, y + dy]);
+    else if (o.type === 'text') { o.x += dx; o.y += dy; }
+    else { o.x1 += dx; o.x2 += dx; o.y1 += dy; o.y2 += dy; }
+  }
+
+  function distSeg(px_, py, x1, y1, x2, y2) {
+    const dx = x2 - x1, dy = y2 - y1, l2 = dx * dx + dy * dy;
+    const t = l2 ? Math.max(0, Math.min(1, ((px_ - x1) * dx + (py - y1) * dy) / l2)) : 0;
+    return Math.hypot(px_ - (x1 + t * dx), py - (y1 + t * dy));
+  }
+
+  function hitTest(x, y) {
+    for (let i = objs.length - 1; i >= 0; i--) {
+      const o = objs[i], b = bboxOf(o), tol = 8 + o.width / 2;
+      const inside = x >= b.x1 - tol && x <= b.x2 + tol && y >= b.y1 - tol && y <= b.y2 + tol;
+      if (!inside) continue;
+      if (o.type === 'line' || o.type === 'arrow') { if (distSeg(x, y, o.x1, o.y1, o.x2, o.y2) <= tol) return o; }
+      else if (o.type === 'pen') { if (o.pts.some((q, j) => distSeg(x, y, q[0], q[1], (o.pts[j + 1] || q)[0], (o.pts[j + 1] || q)[1]) <= tol)) return o; }
+      else if ((o.type === 'rect' || o.type === 'ellipse') && !o.fill) {
+        // An unfilled box is only grabbed by its outline.
+        const nearEdge = Math.min(Math.abs(x - b.x1), Math.abs(x - b.x2), Math.abs(y - b.y1), Math.abs(y - b.y2)) <= tol;
+        if (nearEdge) return o;
+      } else return o;
+    }
+    return null;
+  }
+
+  // Shift keeps shapes square/round and lines at 45° steps.
+  function constrain(o, shift) {
+    if (!shift) return;
+    const dx = o.x2 - o.x1, dy = o.y2 - o.y1;
+    if (o.type === 'rect' || o.type === 'ellipse') {
+      const m = Math.max(Math.abs(dx), Math.abs(dy));
+      o.x2 = o.x1 + Math.sign(dx || 1) * m; o.y2 = o.y1 + Math.sign(dy || 1) * m;
+    } else {
+      const len = Math.hypot(dx, dy), a = Math.round(Math.atan2(dy, dx) / (Math.PI / 4)) * (Math.PI / 4);
+      o.x2 = o.x1 + Math.cos(a) * len; o.y2 = o.y1 + Math.sin(a) * len;
+    }
+  }
+
+  function startEndDrag(ev, which) {
+    const o = selObj();
+    if (!o) return;
+    ev.preventDefault(); ev.stopPropagation();
+    pushUndo();
+    const h = ev.currentTarget;
+    h.setPointerCapture(ev.pointerId);
+    const move = (m) => {
+      if (which === 'p1') { o.x1 = m.clientX; o.y1 = m.clientY; } else { o.x2 = m.clientX; o.y2 = m.clientY; }
+      if (m.shiftKey) {
+        // Constrain relative to the other end.
+        const t = which === 'p1' ? { ...o, x1: o.x2, y1: o.y2, x2: o.x1, y2: o.y1 } : o;
+        constrain(t, true);
+        if (which === 'p1') { o.x1 = t.x2; o.y1 = t.y2; }
+      }
+      renderDraw();
+    };
+    const up = () => { h.removeEventListener('pointermove', move); h.removeEventListener('pointerup', up); syncDraw(); };
+    h.addEventListener('pointermove', move);
+    h.addEventListener('pointerup', up);
+  }
+
+  function onDrawDown(ev) {
+    if (ev.button !== 0) return;
+    ev.preventDefault();
+    commitText();
+    const x0 = ev.clientX, y0 = ev.clientY;
+    const layer = ui.dLayer;
+    layer.setPointerCapture(ev.pointerId);
+    let move, up;
+    if (drawTool === 'select') {
+      const o = hitTest(x0, y0);
+      selId = o ? o.id : null;
+      if (o) { drawColor = o.color || drawColor; drawW = o.width || drawW; drawFill = !!o.fill; }
+      syncDraw();
+      if (!o) return;
+      pushUndo();
+      let lx = x0, ly = y0;
+      move = (m) => { moveObj(o, m.clientX - lx, m.clientY - ly); lx = m.clientX; ly = m.clientY; renderDraw(); };
+      up = () => finish();
+    } else if (drawTool === 'text') {
+      startText(x0, y0);
+      return;
+    } else {
+      pushUndo();
+      const o = drawTool === 'pen'
+        ? { id: ++objSeq, type: 'pen', color: drawColor, width: drawW, pts: [[x0, y0]] }
+        : { id: ++objSeq, type: drawTool, color: drawColor, width: drawW, fill: drawFill && (drawTool === 'rect' || drawTool === 'ellipse'), x1: x0, y1: y0, x2: x0, y2: y0 };
+      objs.push(o);
+      move = (m) => {
+        if (o.type === 'pen') {
+          const last = o.pts[o.pts.length - 1];
+          if (Math.hypot(m.clientX - last[0], m.clientY - last[1]) >= 2) o.pts.push([m.clientX, m.clientY]);
+        } else { o.x2 = m.clientX; o.y2 = m.clientY; constrain(o, m.shiftKey); }
+        renderDraw();
+      };
+      up = () => {
+        const tiny = o.type !== 'pen' && Math.hypot(o.x2 - o.x1, o.y2 - o.y1) < 4;
+        if (tiny) { objs = objs.filter((q) => q !== o); dUndo.pop(); }
+        finish();
+      };
+    }
+    function finish() {
+      layer.removeEventListener('pointermove', move);
+      layer.removeEventListener('pointerup', up);
+      layer.removeEventListener('pointercancel', finish);
+      syncDraw();
+    }
+    layer.addEventListener('pointermove', move);
+    layer.addEventListener('pointerup', up);
+    layer.addEventListener('pointercancel', finish);
+  }
+
+  /* text marks */
+  function startText(x, y) {
+    const i = document.createElement('input');
+    i.className = 'dtext hud';
+    i.style.left = `${x}px`;
+    i.style.top = `${y - 16}px`;
+    i.placeholder = 'Type a note, then Enter';
+    i.addEventListener('keydown', (e) => {
+      e.stopPropagation();
+      if (e.key === 'Enter') { e.preventDefault(); commitText(); }
+      else if (e.key === 'Escape') { e.preventDefault(); cancelText(); }
+    });
+    textInput = { input: i, x, y };
+    root.appendChild(i);
+    setTimeout(() => i.focus(), 0);
+  }
+  function cancelText() { textInput?.input.remove(); textInput = null; }
+  function commitText() {
+    if (!textInput) return;
+    const { input, x, y } = textInput;
+    const text = input.value.trim();
+    input.remove();
+    textInput = null;
+    if (!text) return;
+    pushUndo();
+    objs.push({ id: ++objSeq, type: 'text', color: drawColor, size: 20, text, x, y: y + 6, width: 1 });
+    syncDraw();
+  }
+
+  /* brief */
+  function targetAt(x, y) {
+    const t = document.elementsFromPoint(x, y).find((n) => !inRoot(n) && n !== document.documentElement && n !== document.body);
+    return t ? { label: label(t), selector: cssPath(t), classes: classesOf(t), ids: t.id ? [t.id] : [] } : null;
+  }
+
+  function annotationData() {
+    return objs.map((o, i) => {
+      const b = bboxOf(o);
+      const box = { x: round(b.x1), y: round(b.y1), w: round(b.x2 - b.x1), h: round(b.y2 - b.y1) };
+      const pts = [];
+      if (o.type === 'text') pts.push([o.x, o.y - o.size / 2]);
+      else if (o.type === 'arrow' || o.type === 'line') pts.push([o.x1, o.y1], [o.x2, o.y2]);
+      else {
+        pts.push([(b.x1 + b.x2) / 2, (b.y1 + b.y2) / 2]);
+        if (o.type === 'rect' || o.type === 'ellipse') {
+          for (const fx of [0.2, 0.8]) for (const fy of [0.2, 0.8]) pts.push([b.x1 + (b.x2 - b.x1) * fx, b.y1 + (b.y2 - b.y1) * fy]);
+        }
+      }
+      const seen = new Set();
+      const targets = [];
+      for (const [x, y] of pts) {
+        const t = targetAt(x, y);
+        if (t && !seen.has(t.selector)) { seen.add(t.selector); targets.push(t); }
+      }
+      return { n: i + 1, kind: o.type === 'rect' ? 'box' : o.type, color: o.color, filled: !!o.fill, text: o.text || '', box, targets: targets.slice(0, 4) };
+    });
+  }
+
+  async function makeDrawBrief() {
+    const note = (ui.notes?.value || '').trim();
+    if (!objs.length && !note) throw new Error('Draw something or write a note first.');
+    commitText();
+    const sel = selId; selId = null; renderDraw();
+    const annotations = annotationData();
+    const annotated = await shoot('annotated');
+    selId = sel; renderDraw();
+    return bridge.brief({
+      mode: 'draw',
+      viewport: { w: window.innerWidth, h: window.innerHeight },
+      shots: { before: beforeShot, annotated },
+      notes: note,
+      annotations,
+      changes: [],
+    });
+  }
+
   /* ---------------- picking ---------------- */
 
   function pickAt(x, y) {
@@ -1331,14 +1785,20 @@
 
   function onKey(e) {
     if (!on) return;
-    if (inRoot(e.target) && /^(INPUT|SELECT)$/.test(e.target.tagName)) {
+    if (inRoot(e.target) && /^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName)) {
       if (e.key === 'Escape' || e.key === 'Enter') e.target.blur();
       return; // typing in a style field
     }
     const mod = e.metaKey || e.ctrlKey;
-    if (mod && e.key.toLowerCase() === 'z') { e.preventDefault(); e.stopPropagation(); undo(); return; }
+    if (mod && e.key.toLowerCase() === 'z') {
+      e.preventDefault(); e.stopPropagation();
+      if (drawOn) { if (e.shiftKey) drawRedo(); else drawUndo(); } else undo();
+      return;
+    }
     if (mod) return; // let menu shortcuts (like toggling this mode) through
     if (shapeEl) { onShapeKey(e); return; }
+    if (drawOn) { onDrawKey(e); return; }
+    if (e.key.toLowerCase() === 'd') { e.preventDefault(); e.stopPropagation(); enterDraw(); return; }
     e.preventDefault();
     e.stopPropagation();
     if (e.key === 'Escape') {
@@ -1368,6 +1828,7 @@
   }
 
   async function makeBrief() {
+    if (drawOn) return makeDrawBrief();
     const changes = collectChanges();
     if (!changes.length) throw new Error('No changes to describe yet.');
     const after = await shoot('after');
@@ -1402,27 +1863,27 @@
     }
   }
 
-  function sendClick() {
-    if (!ui.sendBtn.dataset.confirm) {
-      ui.sendBtn.dataset.confirm = '1';
-      ui.sendBtn.textContent = 'Confirm: agent edits files';
+  function sendClick(btn) {
+    if (!btn.dataset.confirm) {
+      btn.dataset.confirm = '1';
+      btn.textContent = 'Confirm: agent edits files';
       clearTimeout(confirmTimer);
-      confirmTimer = setTimeout(resetSendBtn, 5000);
+      confirmTimer = setTimeout(() => resetSendBtn(btn), 5000);
       return;
     }
-    resetSendBtn();
-    doSend();
+    resetSendBtn(btn);
+    doSend({}, btn);
   }
 
-  function resetSendBtn() {
+  function resetSendBtn(btn) {
     clearTimeout(confirmTimer);
-    if (!ui.sendBtn) return;
-    delete ui.sendBtn.dataset.confirm;
-    ui.sendBtn.textContent = 'Send to agent';
+    if (!btn) return;
+    delete btn.dataset.confirm;
+    btn.textContent = 'Send to agent';
   }
 
-  async function doSend(opts = {}) {
-    ui.sendBtn.disabled = true;
+  async function doSend(opts = {}, btn = ui.sendBtn) {
+    btn.disabled = true;
     setStatus('Writing brief…');
     try {
       await makeBrief();
@@ -1434,15 +1895,17 @@
         setStatus(`${res.dry ? 'Dry run OK.\n' : 'Done.\n'}${res.output}${res.diffStat ? '\n\n' + res.diffStat : ''}`);
         if (!res.dry) {
           const reload = button('Reload to see changes', 'primary', () => location.reload());
-          ui.status.appendChild(el('div'));
-          ui.status.appendChild(reload);
+          const st = drawOn && ui.dStatus ? ui.dStatus : ui.status;
+          st.appendChild(el('div'));
+          st.appendChild(reload);
         }
       }
     } catch (err) {
       setStatus(err.message);
     } finally {
-      ui.sendBtn.disabled = false;
+      btn.disabled = false;
       renderList();
+      if (drawOn) syncDraw();
     }
   }
 
@@ -1474,6 +1937,7 @@
     window.removeEventListener('keydown', onKey, true);
     for (const t of BLOCKED) window.removeEventListener(t, swallow, true);
     shapeEl = null; pending = null; view = null; busy = false;
+    drawOn = false; objs = []; dUndo = []; dRedo = []; selId = null; textInput = null;
     root?.remove();
     root = null; ui = {}; selEl = null; hoverEl = null; lastSel = null;
   }
