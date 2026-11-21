@@ -35,6 +35,8 @@
   let lastSel = null;
   let shapeEl = null;      // element currently in Shape mode
   let shapeTool = 'corners';
+  let busy = false;        // a drag is in progress
+  let idSeq = 0;
   let pending = null;      // a drawn but not yet applied cut: { p1, p2, keep }
   let lastSnap = { el: null, t: 0 };
   let raf = 0;
@@ -381,11 +383,40 @@
     #__studio .swatches { display: flex; flex-wrap: wrap; gap: 5px; padding: 0 0 6px; justify-content: flex-end; }
     #__studio .sw { width: 18px; height: 18px; border-radius: 50%; border: 2px solid rgba(128,128,128,.5); cursor: pointer; padding: 0; }
     #__studio .sw:hover { border-color: ${INK}; }
-    #__studio .shapebox { box-shadow: 0 0 0 100vmax rgba(10,14,22,.55); outline: 2px dashed #fff; outline-offset: 0; }
-    #__studio .shapebox .c { position: absolute; width: 12px; height: 12px; margin: -6px 0 0 -6px; border-radius: 50%; background: #f59e0b; border: 2px solid #fff; pointer-events: auto; touch-action: none; }
+    #__studio .dim { position: fixed; inset: 0; background: rgba(10,14,22,.6); pointer-events: none; opacity: 0; }
+    #__studio .shapebox { outline: 2px dashed rgba(255,255,255,.7); outline-offset: 0; }
+    #__studio .stage {
+      position: fixed; overflow: hidden; pointer-events: none; border: 0 solid ${INK}; box-sizing: border-box;
+      background-color: rgba(255,255,255,calc(var(--bg, 0) * 0.97));
+      background-image: linear-gradient(45deg, rgba(128,128,128,.14) 25%, transparent 25%, transparent 75%, rgba(128,128,128,.14) 75%),
+        linear-gradient(45deg, rgba(128,128,128,.14) 25%, transparent 25%, transparent 75%, rgba(128,128,128,.14) 75%);
+      background-size: 20px 20px; background-position: 0 0, 10px 10px;
+      box-shadow: 0 12px 40px rgba(0,0,0,.35);
+    }
+    @media (prefers-color-scheme: dark) { #__studio .stage { background-color: rgba(30,36,44,calc(var(--bg, 0) * 0.97)); } }
+    #__studio .stage .mirror { position: absolute; transform-origin: 0 0; pointer-events: none; }
+    #__studio .stage .ghost { position: absolute; outline: 1.5px dashed rgba(128,128,128,.8); pointer-events: none; }
+    #__studio .handlelayer { position: fixed; inset: 0; pointer-events: none; }
+    #__studio .handlelayer .c { position: absolute; width: 16px; height: 16px; margin: -8px 0 0 -8px; border-radius: 50%; background: #f59e0b; border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,.4); pointer-events: auto; touch-action: none; }
     #__studio .shapelayer { position: fixed; inset: 0; }
     #__studio .shapelayer svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
-    #__studio .shapebar { left: 50%; top: 18px; transform: translateX(-50%); width: auto; max-width: 560px; border-radius: 24px; padding: 10px 14px 12px; }
+    #__studio .cluster { position: fixed; width: 0; height: 0; pointer-events: none; }
+    #__studio .cb {
+      position: absolute; width: 32px; height: 32px; margin: -16px 0 0 -16px; padding: 0; border-radius: 50%;
+      border: 2px solid ${INK}; background: #fff; color: ${INK}; font-size: 15px; font-weight: 700; line-height: 1;
+      cursor: pointer; pointer-events: auto; box-shadow: 0 3px 10px rgba(0,0,0,.25);
+      opacity: 0; transform: scale(.3); animation: __studioBloom .22s cubic-bezier(.2,1.4,.4,1) forwards;
+    }
+    @media (prefers-color-scheme: dark) { #__studio .cb { background: #151b22; } }
+    #__studio .cb:hover { background: ${INK}; color: #fff; }
+    #__studio .cb[disabled] { display: none; }
+    #__studio .cb:hover::after {
+      content: attr(data-label); position: absolute; left: 50%; bottom: 40px; transform: translateX(-50%);
+      background: ${INK}; color: #fff; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; white-space: nowrap;
+    }
+    #__studio .cluster.below .cb:hover::after { bottom: auto; top: 40px; }
+    @keyframes __studioBloom { to { opacity: 1; transform: scale(1); } }
+    #__studio .shapebar { left: 50%; top: 18px; bottom: auto; transform: translateX(-50%); width: 520px; max-height: none; border-radius: 24px; padding: 10px 14px 12px; }
     #__studio .shapebar .btns { margin: 6px 0; }
     #__studio .shapebar .hint { margin: 4px 0 0; }
     #__studio.shooting .hud { display: none !important; }
@@ -435,8 +466,23 @@
       ui.handles[name] = h;
       ui.sel.appendChild(h);
     }
+    // A small fan of buttons that appears next to the selected element.
+    ui.cluster = el('div', 'cluster hud');
+    ui.clusterBtns = [
+      ['↑', 'Select parent', () => { if (selEl?.parentElement && selEl.parentElement !== document.body && !inRoot(selEl.parentElement)) { childStack.push(selEl); selEl = selEl.parentElement; } }],
+      ['◐', 'Shape', () => enterShape()],
+      ['Aa', 'Style', () => toggleStylePanel()],
+      ['⌫', 'Delete', () => deleteSelected()],
+    ].map(([glyph, name, fn]) => {
+      const b = el('button', 'cb', glyph);
+      b.dataset.label = name;
+      b.title = name;
+      b.addEventListener('click', (ev) => { ev.stopPropagation(); fn(); });
+      ui.cluster.appendChild(b);
+      return b;
+    });
     ui.changed = el('div', 'changedLayer');
-    root.append(ui.hover, ui.changed, ui.sel);
+    root.append(ui.hover, ui.changed, ui.sel, ui.cluster);
 
     // Control panel
     ui.panel = el('div', 'panel hud');
@@ -658,6 +704,35 @@
     box.style.height = `${rect.height}px`;
   }
 
+
+  // Keep the button fan above the selected element (or below it when there is no room),
+  // out of the way of the shape and its handles.
+  function tickCluster() {
+    const c = ui.cluster;
+    const show = selEl && selEl.isConnected && !shapeEl && !busy && !ui.viewer;
+    if (!show) { c.style.display = 'none'; c.dataset.for = ''; return; }
+    const r = selEl.getBoundingClientRect();
+    const R = 70, angles = [-50, -17, 17, 50];
+    const above = r.top - 12 - R - 16 > 4;
+    const cx = Math.max(76, Math.min(window.innerWidth - 76, r.left + r.width / 2));
+    c.style.display = 'block';
+    c.classList.toggle('below', !above);
+    c.style.left = `${cx}px`;
+    c.style.top = `${above ? r.top - 12 : r.bottom + 12}px`;
+    ui.clusterBtns.forEach((b, i) => {
+      const a = (angles[i] * Math.PI) / 180;
+      b.style.left = `${R * Math.sin(a)}px`;
+      b.style.top = `${above ? -R * Math.cos(a) : R * Math.cos(a)}px`;
+      b.style.animationDelay = `${i * 35}ms`;
+      if (i === 0) b.disabled = !(selEl.parentElement && selEl.parentElement !== document.body && !inRoot(selEl.parentElement));
+    });
+    // Replay the bloom when you select something new.
+    if (c.dataset.for !== String(selEl.__studioId || (selEl.__studioId = ++idSeq))) {
+      c.dataset.for = String(selEl.__studioId);
+      ui.clusterBtns.forEach((b) => { b.style.animation = 'none'; void b.offsetWidth; b.style.animation = ''; });
+    }
+  }
+
   function tick() {
     if (!on) return;
     ui.deleteBtn.disabled = !selEl || !!shapeEl; // follows the selection
@@ -672,6 +747,7 @@
     }
 
     if (shapeEl) tickShape();
+    tickCluster();
     if (selEl && selEl.isConnected && !shapeEl) {
       const r = selEl.getBoundingClientRect();
       const cs = getComputedStyle(selEl);
@@ -782,7 +858,9 @@
       }
       renderList();
     };
+    busy = true;
     const up = () => {
+      busy = false;
       handle.removeEventListener('pointermove', move);
       handle.removeEventListener('pointerup', up);
       handle.removeEventListener('pointercancel', up);
@@ -794,6 +872,9 @@
 
 
   /* ---------------- shape mode ---------------- */
+  // The shape stays where it is in the page. Shape mode opens a magnified view of it in a
+  // box (it grows out of the shape), and every tool works through that view. When you
+  // leave, the box shrinks back onto the shape.
 
   const HINTS = {
     corners: 'Drag a corner dot to round just that corner (hold Shift for all four). Arrow keys nudge the shape.',
@@ -801,6 +882,48 @@
     move: 'Drag to move the shape. Arrow keys nudge 1px (Shift: 10px).',
   };
   const CORNER_SIGNS = [[1, 1], [-1, 1], [-1, -1], [1, -1]];
+  const ANIM_MS = 260;
+  let view = null;
+
+  const lerp = (a, b, t) => a + (b - a) * t;
+  const ease = (t) => 1 - Math.pow(1 - t, 3);
+
+  // Where the current animation frame puts things: scale, the stage position of the shape's
+  // original top-left corner, and the frame rectangle.
+  function viewNow() {
+    const e = ease(view.t);
+    return {
+      e,
+      k: lerp(1, view.k, e),
+      S: { x: lerp(view.r0.left, view.S.x, e), y: lerp(view.r0.top, view.S.y, e) },
+      frame: {
+        left: lerp(view.r0.left, view.frame.left, e), top: lerp(view.r0.top, view.frame.top, e),
+        width: lerp(view.r0.width, view.frame.width, e), height: lerp(view.r0.height, view.frame.height, e),
+      },
+    };
+  }
+  const toStage = (p, v = viewNow()) => ({ x: v.S.x + (p.x - view.r0.left) * v.k, y: v.S.y + (p.y - view.r0.top) * v.k });
+  const fromStage = (x, y) => { const v = viewNow(); return { x: view.r0.left + (x - v.S.x) / v.k, y: view.r0.top + (y - v.S.y) / v.k }; };
+  const stageReady = () => view && view.t >= 1 && view.target === 1;
+
+  // A static copy of an element with all of its computed styles written inline, so it
+  // looks the same outside its page context.
+  function cloneStyled(src) {
+    const dst = src.cloneNode(true);
+    const srcs = [src, ...src.querySelectorAll('*')];
+    const dsts = [dst, ...dst.querySelectorAll('*')];
+    srcs.forEach((o, i) => {
+      const c = dsts[i];
+      const cs = getComputedStyle(o);
+      let css = '';
+      for (const name of cs) css += `${name}:${cs.getPropertyValue(name)};`;
+      c.removeAttribute('id');
+      c.removeAttribute('class');
+      c.style.cssText = css + 'transition:none;animation:none;pointer-events:none;';
+    });
+    dst.style.cssText += 'position:absolute;left:0;top:0;right:auto;bottom:auto;margin:0;translate:none;transform:none;';
+    return dst;
+  }
 
   function enterShape() {
     if (!selEl || !selEl.isConnected || shapeEl) return;
@@ -808,20 +931,35 @@
     shapeTool = 'corners';
     pending = null;
     ui.sel.style.display = 'none';
-    ui.shape = el('div', 'box shapebox hud');
-    ui.corners = CORNER_SIGNS.map((_, i) => {
-      const c = el('div', 'c');
-      c.style.cursor = i % 2 ? 'nesw-resize' : 'nwse-resize';
-      c.addEventListener('pointerdown', (ev) => startCornerDrag(ev, i));
-      ui.shape.appendChild(c);
-      return c;
-    });
+    if (ui.cluster) ui.cluster.style.display = 'none';
+
+    const r0 = shapeEl.getBoundingClientRect();
+    const W = Math.min(620, window.innerWidth - 60);
+    const H = Math.min(440, window.innerHeight - 200);
+    const k = Math.max(1, Math.min((W - 110) / Math.max(1, r0.width), (H - 110) / Math.max(1, r0.height), 16));
+    const frame = { left: (window.innerWidth - W) / 2, top: (window.innerHeight - H) / 2 + 50, width: W, height: H };
+    const S = { x: frame.left + (W - r0.width * k) / 2, y: frame.top + (H - r0.height * k) / 2 };
+    view = { r0, k, S, frame, t: 0, target: 1, last: performance.now(), sig: null };
+
+    ui.dim = el('div', 'dim hud');
+    ui.shape = el('div', 'box shapebox hud'); // marks where the shape lives in the page
+    ui.stage = el('div', 'stage hud');
+    ui.ghost = el('div', 'ghost');
+    ui.stage.appendChild(ui.ghost);
+    ui.mirror = null;
     ui.layer = el('div', 'shapelayer hud');
     ui.svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     ui.layer.appendChild(ui.svg);
     ui.layer.addEventListener('pointerdown', onLayerDown);
-    root.insertBefore(ui.shape, ui.panel);
-    root.insertBefore(ui.layer, ui.panel);
+    ui.handles2 = el('div', 'handlelayer hud');
+    ui.corners = CORNER_SIGNS.map((_, i) => {
+      const c = el('div', 'c');
+      c.style.cursor = i % 2 ? 'nesw-resize' : 'nwse-resize';
+      c.addEventListener('pointerdown', (ev) => startCornerDrag(ev, i));
+      ui.handles2.appendChild(c);
+      return c;
+    });
+    for (const n of [ui.dim, ui.shape, ui.stage, ui.layer, ui.handles2]) root.insertBefore(n, ui.panel);
 
     ui.bar = el('div', 'panel shapebar hud');
     const head = el('div', 'head');
@@ -844,9 +982,16 @@
   }
 
   function exitShape() {
-    if (!shapeEl) return;
-    shapeEl = null; pending = null;
-    for (const k of ['shape', 'layer', 'bar']) { ui[k]?.remove(); ui[k] = null; }
+    if (!shapeEl || !view || view.target === 0) return;
+    pending = null;
+    view.target = 0; // shrink back onto the shape, then tickShape cleans up
+    ui.layer.style.pointerEvents = 'none';
+  }
+
+  function finishShapeExit() {
+    shapeEl = null; pending = null; view = null;
+    for (const k of ['dim', 'shape', 'stage', 'layer', 'handles2', 'bar']) { ui[k]?.remove(); ui[k] = null; }
+    ui.mirror = null;
     renderList();
   }
 
@@ -860,17 +1005,57 @@
   }
 
   function tickShape() {
-    if (!shapeEl.isConnected) { exitShape(); return; }
+    if (!shapeEl.isConnected) { finishShapeExit(); return; }
+    const now = performance.now();
+    const dt = now - view.last;
+    view.last = now;
+    view.t = Math.max(0, Math.min(1, view.t + ((view.target === 1 ? 1 : -1) * dt) / ANIM_MS));
+    if (view.target === 0 && view.t <= 0) { finishShapeExit(); return; }
+    const v = viewNow();
     const r = shapeEl.getBoundingClientRect();
     const cs = getComputedStyle(shapeEl);
+
     place(ui.shape, r);
+    ui.dim.style.opacity = v.e;
+    // The frame, growing from the shape to its full size.
+    Object.assign(ui.stage.style, {
+      left: `${v.frame.left}px`, top: `${v.frame.top}px`, width: `${v.frame.width}px`, height: `${v.frame.height}px`,
+      borderWidth: `${(4 * v.e).toFixed(2)}px`, borderRadius: `${(28 * v.e).toFixed(1)}px`,
+    });
+    ui.stage.style.setProperty('--bg', v.e);
+
+    // The magnified shape. Rebuilt whenever the shape's inline style (the edits) changes.
+    const sig = shapeEl.getAttribute('style') || '';
+    if (view.sig !== sig || !ui.mirror) {
+      view.sig = sig;
+      ui.mirror?.remove();
+      ui.mirror = el('div', 'mirror');
+      ui.mirror.appendChild(cloneStyled(shapeEl));
+      ui.stage.appendChild(ui.mirror);
+    }
+    const pos = toStage({ x: r.left, y: r.top }, v);
+    Object.assign(ui.mirror.style, {
+      left: `${pos.x - v.frame.left - 4 * v.e}px`, top: `${pos.y - v.frame.top - 4 * v.e}px`,
+      transform: `scale(${v.k})`,
+    });
+    // Dashed outline of where the shape started.
+    const g = toStage({ x: view.r0.left, y: view.r0.top }, v);
+    Object.assign(ui.ghost.style, {
+      left: `${g.x - v.frame.left - 4 * v.e}px`, top: `${g.y - v.frame.top - 4 * v.e}px`,
+      width: `${view.r0.width * v.k}px`, height: `${view.r0.height * v.k}px`,
+    });
+
+    // Corner dots on the magnified shape.
     const R = radiiPx(cs, r);
-    const pos = [[0, 0], [1, 0], [1, 1], [0, 1]];
+    const ready = stageReady();
+    const corner = [[r.left, r.top], [r.right, r.top], [r.right, r.bottom], [r.left, r.bottom]];
     ui.corners.forEach((c, i) => {
-      const d = Math.min(R[i] * 0.29 + 9, Math.min(r.width, r.height) / 2);
-      c.style.left = `${pos[i][0] ? r.width - d : d}px`;
-      c.style.top = `${pos[i][1] ? r.height - d : d}px`;
-      c.style.display = shapeTool === 'corners' ? 'block' : 'none';
+      const p = toStage({ x: corner[i][0], y: corner[i][1] }, v);
+      const [sx, sy] = CORNER_SIGNS[i];
+      const d = Math.min(R[i] * v.k * 0.29 + 16, (Math.min(r.width, r.height) * v.k) / 2);
+      c.style.left = `${p.x + sx * d}px`;
+      c.style.top = `${p.y + sy * d}px`;
+      c.style.display = shapeTool === 'corners' && ready ? 'block' : 'none';
     });
     ui.applyBtn.style.display = ui.cancelCutBtn.style.display = pending ? '' : 'none';
     drawCut(r);
@@ -878,21 +1063,25 @@
 
   /* corner dragging: one corner at a time (Shift = all four) */
   function startCornerDrag(ev, i) {
+    if (!stageReady()) return;
     ev.preventDefault();
     ev.stopPropagation();
     const t = shapeEl;
     snapshot(t);
     const e = ensureEdit(t);
     e.shaped = true;
+    busy = true;
     const h = ev.currentTarget;
     h.setPointerCapture(ev.pointerId);
     const x0 = ev.clientX, y0 = ev.clientY;
     const rect = t.getBoundingClientRect();
     const R0 = radiiPx(getComputedStyle(t), rect);
     const [sx, sy] = CORNER_SIGNS[i];
+    const k = view.k;
     const move = (m) => {
-      const delta = ((m.clientX - x0) * sx + (m.clientY - y0) * sy) / 2;
-      // A corner may only grow until it meets its neighbours.
+      // The dot sits 0.29 of a radius (in magnified pixels) in from the corner, so the
+      // radius follows the cursor one to one.
+      const delta = ((m.clientX - x0) * sx + (m.clientY - y0) * sy) / 2 / (0.29 * k);
       const nb = [[1, 3], [0, 2], [3, 1], [2, 0]][i]; // horizontal neighbour, vertical neighbour
       const max = Math.min(rect.width - R0[nb[0]], rect.height - R0[nb[1]]);
       if (m.shiftKey) {
@@ -905,7 +1094,7 @@
       }
       renderList();
     };
-    const up = () => { h.removeEventListener('pointermove', move); h.removeEventListener('pointerup', up); h.removeEventListener('pointercancel', up); };
+    const up = () => { busy = false; h.removeEventListener('pointermove', move); h.removeEventListener('pointerup', up); h.removeEventListener('pointercancel', up); };
     h.addEventListener('pointermove', move);
     h.addEventListener('pointerup', up);
     h.addEventListener('pointercancel', up);
@@ -928,6 +1117,7 @@
   }
 
   function onShapeKey(e) {
+    if (!stageReady()) return;
     const step = e.shiftKey ? 10 : 1;
     if (e.key === 'Escape') {
       if (pending) pending = null; else exitShape();
@@ -939,11 +1129,14 @@
     else if (e.key === 'ArrowDown') nudge(0, step);
   }
 
-  /* layer: move tool drags the shape, slice tool draws a cut line */
+  /* layer: move tool drags the shape, slice tool draws a cut line. Pointer positions are
+     on the magnified view; everything is converted back to real page pixels. */
   function onLayerDown(ev) {
+    if (!stageReady()) return;
     ev.preventDefault();
     ev.stopPropagation();
     const t = shapeEl;
+    const k = view.k;
     const x0 = ev.clientX, y0 = ev.clientY;
     ui.layer.setPointerCapture(ev.pointerId);
     let move, up;
@@ -952,7 +1145,7 @@
       const e = ensureEdit(t);
       const tx = e.tx, ty = e.ty;
       move = (m) => {
-        let dx = m.clientX - x0, dy = m.clientY - y0;
+        let dx = (m.clientX - x0) / k, dy = (m.clientY - y0) / k;
         if (m.shiftKey) { if (Math.abs(dx) > Math.abs(dy)) dy = 0; else dx = 0; }
         e.tx = tx + dx; e.ty = ty + dy;
         applyTranslate(t, e);
@@ -962,15 +1155,16 @@
     } else {
       const r = t.getBoundingClientRect();
       const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
-      const start = { x: x0, y: y0 };
+      const start = fromStage(x0, y0);
+      const snap = 6 / k;
       let drawing = null;
       move = (m) => {
         if (!drawing && Math.hypot(m.clientX - x0, m.clientY - y0) < 5) return;
-        let p2 = { x: m.clientX, y: m.clientY }, p1 = { ...start };
+        const p1 = { ...start }, p2 = fromStage(m.clientX, m.clientY);
         const dx = p2.x - p1.x, dy = p2.y - p1.y;
         const ang = (Math.atan2(Math.abs(dx), Math.abs(dy)) * 180) / Math.PI; // 0 = vertical
-        if (ang < 4) { p2.x = p1.x; if (Math.abs(p1.x - cx) < 6) p1.x = p2.x = cx; }
-        else if (ang > 86) { p2.y = p1.y; if (Math.abs(p1.y - cy) < 6) p1.y = p2.y = cy; }
+        if (ang < 4) { p2.x = p1.x; if (Math.abs(p1.x - cx) < snap) p1.x = p2.x = cx; }
+        else if (ang > 86) { p2.y = p1.y; if (Math.abs(p1.y - cy) < snap) p1.y = p2.y = cy; }
         drawing = { p1, p2, keep: pending ? pending.keep : 1 };
         pending = drawing;
       };
@@ -978,8 +1172,9 @@
         if (!drawing && pending) {
           // A plain click: pick which half to keep.
           const { p1, p2 } = pending;
-          const s = Math.sign(-(p2.y - p1.y) * (u.clientX - p1.x) + (p2.x - p1.x) * (u.clientY - p1.y));
-          if (s) pending.keep = s;
+          const q = fromStage(u.clientX, u.clientY);
+          const sgn = Math.sign(-(p2.y - p1.y) * (q.x - p1.x) + (p2.x - p1.x) * (q.y - p1.y));
+          if (sgn) pending.keep = sgn;
         }
         finish();
       };
@@ -1022,27 +1217,31 @@
 
   function drawCut(r) {
     ui.svg.textContent = '';
-    if (!pending) return;
+    if (!pending || !view) return;
+    const v = viewNow();
     const { p1, p2, keep } = pending;
     const norm = (q) => ({ x: (q.x - r.left) / r.width, y: (q.y - r.top) / r.height });
     const a = norm(p1), b = norm(p2);
     const box = CORNERS.map((c) => [c[0], c[1]]);
-    const toView = (poly) => poly.map(([x, y]) => `${r.left + x * r.width},${r.top + y * r.height}`).join(' ');
+    const toView = (poly) => poly
+      .map(([x, y]) => { const q = toStage({ x: r.left + x * r.width, y: r.top + y * r.height }, v); return `${q.x},${q.y}`; })
+      .join(' ');
     const kept = clipPoly(box, a, b, keep), gone = clipPoly(box, a, b, -keep);
     if (gone.length > 2) ui.svg.appendChild(svgEl('polygon', { points: toView(gone), fill: 'rgba(239,68,68,.45)' }));
     if (kept.length > 2) ui.svg.appendChild(svgEl('polygon', { points: toView(kept), fill: 'rgba(34,197,94,.35)' }));
-    // Extend the line across the whole shape so it is easy to see.
-    const dx = p2.x - p1.x, dy = p2.y - p1.y, len = Math.hypot(dx, dy) || 1;
-    const ext = Math.hypot(r.width, r.height) + 40;
+    // Extend the line across the whole frame so it is easy to see.
+    const s1 = toStage(p1, v), s2 = toStage(p2, v);
+    const dx = s2.x - s1.x, dy = s2.y - s1.y, len = Math.hypot(dx, dy) || 1;
+    const ext = Math.hypot(v.frame.width, v.frame.height);
     ui.svg.appendChild(svgEl('line', {
-      x1: p1.x - (dx / len) * ext, y1: p1.y - (dy / len) * ext, x2: p1.x + (dx / len) * ext, y2: p1.y + (dy / len) * ext,
-      stroke: '#fff', 'stroke-width': 2, 'stroke-dasharray': '6 4',
+      x1: s1.x - (dx / len) * ext, y1: s1.y - (dy / len) * ext, x2: s1.x + (dx / len) * ext, y2: s1.y + (dy / len) * ext,
+      stroke: INK, 'stroke-width': 2, 'stroke-dasharray': '6 4',
     }));
-    const vertical = Math.abs(dx) < 0.5, horizontal = Math.abs(dy) < 0.5;
+    const rx = p2.x - p1.x, ry = p2.y - p1.y;
     let text = 'diagonal cut';
-    if (vertical) text = `vertical cut at ${round(((p1.x - r.left) / r.width) * 100)}%`;
-    else if (horizontal) text = `horizontal cut at ${round(((p1.y - r.top) / r.height) * 100)}%`;
-    const tx = svgEl('text', { x: r.left, y: Math.max(14, r.top - 8), fill: '#fff', 'font-size': 12, 'font-weight': 600 });
+    if (Math.abs(rx) < 0.5) text = `vertical cut at ${round(((p1.x - r.left) / r.width) * 100)}%`;
+    else if (Math.abs(ry) < 0.5) text = `horizontal cut at ${round(((p1.y - r.top) / r.height) * 100)}%`;
+    const tx = svgEl('text', { x: v.frame.left + 16, y: v.frame.top + 24, fill: INK, 'font-size': 12, 'font-weight': 700 });
     tx.textContent = `${text}. Green is kept, red goes.`;
     ui.svg.appendChild(tx);
   }
@@ -1274,7 +1473,7 @@
     window.removeEventListener('pointerdown', onPointerDown, true);
     window.removeEventListener('keydown', onKey, true);
     for (const t of BLOCKED) window.removeEventListener(t, swallow, true);
-    shapeEl = null; pending = null;
+    shapeEl = null; pending = null; view = null; busy = false;
     root?.remove();
     root = null; ui = {}; selEl = null; hoverEl = null; lastSel = null;
   }
