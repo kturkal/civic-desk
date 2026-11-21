@@ -37,6 +37,7 @@
   let shapeTool = 'corners';
   let drawOn = false;      // Draw (sketch) mode
   let drawTool = 'pen', drawColor = '#ff2d8a', drawW = 4, drawFill = false;
+  let eraserPos = null;
   let objs = [], dUndo = [], dRedo = [], selId = null, objSeq = 0, textInput = null;
   let busy = false;        // a drag is in progress
   let idSeq = 0;
@@ -434,6 +435,8 @@
       width: 100%; min-height: 34px; height: 34px; resize: vertical; user-select: text; border: 2px solid ${INK}; border-radius: 14px; background: transparent;
       color: inherit; padding: 6px 10px; font-size: 12px; margin-top: 4px;
     }
+    #__studio .drawbar button.b.icon { width: 38px; padding: 0; display: inline-flex; align-items: center; justify-content: center; }
+    #__studio .drawbar button.b.icon svg { pointer-events: none; }
     #__studio .drawbar .sw { width: 20px; height: 20px; }
     #__studio .drawbar .sw.on { border-color: ${INK}; box-shadow: 0 0 0 2px #fff, 0 0 0 4px ${INK}; }
     #__studio .drawbar input[type=color] { width: 26px; height: 22px; padding: 0; border: 2px solid ${INK}; border-radius: 50%; background: none; cursor: pointer; }
@@ -1332,7 +1335,18 @@
   // elements each mark sits on, goes to the agent.
 
   const PALETTE = ['#ff2d8a', '#ef4444', '#f59e0b', '#facc15', '#22c55e', '#3b82f6', '#111827', '#ffffff'];
-  const TOOLS = [['pen', 'Pen'], ['line', 'Line'], ['arrow', 'Arrow'], ['rect', 'Box'], ['ellipse', 'Oval'], ['text', 'Text'], ['select', 'Select']];
+  const ICON = (inner) => `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${inner}</svg>`;
+  const TOOLS = [
+    ['pen', 'Pen (freehand, smoothed)', ICON('<path d="M3 17c3-9 6-9 8-3s5 5 10-8"/>')],
+    ['line', 'Line', ICON('<path d="M5 19L19 5"/>')],
+    ['curve', 'Curve (drag, then bend with the dot)', ICON('<path d="M4 19C5 9 13 4 20 6"/>')],
+    ['arrow', 'Arrow', ICON('<path d="M5 19L19 5M10 5h9v9"/>')],
+    ['rect', 'Box', ICON('<rect x="4" y="6" width="16" height="12"/>')],
+    ['ellipse', 'Oval', ICON('<ellipse cx="12" cy="12" rx="9" ry="6"/>')],
+    ['text', 'Text', ICON('<path d="M6 6h12M12 6v13"/>')],
+    ['eraser', 'Eraser (rubs out freehand strokes; removes other marks you touch)', ICON('<path d="M4 15l8-9 8 7-5 6H9z"/><path d="M9 20h11"/>')],
+    ['select', 'Select (move, bend, recolor, delete)', ICON('<path d="M6 4l12 7-5 1.5L11 18z"/>')],
+  ];
   const SVGNS = 'http://www.w3.org/2000/svg';
   const mk = (name, attrs = {}) => {
     const n = document.createElementNS(SVGNS, name);
@@ -1360,26 +1374,67 @@
     syncDraw();
   }
 
+  // Lines and arrows can bend: (cx, cy) is how far the curve's control point sits from the
+  // middle of the straight chord. It travels with the ends, so moving or resizing keeps the arc.
+  const chordMid = (o) => ({ x: (o.x1 + o.x2) / 2, y: (o.y1 + o.y2) / 2 });
+  const curved = (o) => (o.type === 'line' || o.type === 'arrow') && Math.hypot(o.cx || 0, o.cy || 0) > 2;
+  const ctrlPt = (o) => { const m = chordMid(o); return { x: m.x + (o.cx || 0), y: m.y + (o.cy || 0) }; };
+  const curvePt = (o, t) => {
+    const c = ctrlPt(o), a = 1 - t;
+    return { x: a * a * o.x1 + 2 * a * t * c.x + t * t * o.x2, y: a * a * o.y1 + 2 * a * t * c.y + t * t * o.y2 };
+  };
+
+  // Light smoothing of hand-drawn points (two passes of a 1-2-1 average, ends fixed).
+  function smoothPts(pts) {
+    let q = pts;
+    for (let k = 0; k < 2 && q.length > 3; k++) {
+      const prev = q;
+      q = prev.map((pt, i) => (i === 0 || i === prev.length - 1 ? pt
+        : [(prev[i - 1][0] + 2 * pt[0] + prev[i + 1][0]) / 4, (prev[i - 1][1] + 2 * pt[1] + prev[i + 1][1]) / 4]));
+    }
+    return q;
+  }
+
+  // A smooth path through the points: quadratic curves between midpoints, so there are no corners.
+  function penPath(pts) {
+    if (pts.length === 1) return `M${pts[0][0]} ${pts[0][1]} L${pts[0][0] + 0.1} ${pts[0][1]}`;
+    if (pts.length === 2) return `M${pts[0][0]} ${pts[0][1]} L${pts[1][0]} ${pts[1][1]}`;
+    let d = `M${pts[0][0]} ${pts[0][1]}`;
+    for (let i = 1; i < pts.length - 1; i++) {
+      d += ` Q${pts[i][0]} ${pts[i][1]} ${(pts[i][0] + pts[i + 1][0]) / 2} ${(pts[i][1] + pts[i + 1][1]) / 2}`;
+    }
+    const l = pts[pts.length - 1];
+    return d + ` L${l[0]} ${l[1]}`;
+  }
+
   function bboxOf(o) {
     if (o.type === 'pen') {
       const xs = o.pts.map((q) => q[0]), ys = o.pts.map((q) => q[1]);
       return { x1: Math.min(...xs), y1: Math.min(...ys), x2: Math.max(...xs), y2: Math.max(...ys) };
     }
     if (o.type === 'text') return { x1: o.x, y1: o.y - o.size, x2: o.x + Math.max(20, o.text.length * o.size * 0.58), y2: o.y + o.size * 0.3 };
+    if (curved(o)) {
+      const q = Array.from({ length: 21 }, (_, i) => curvePt(o, i / 20));
+      return { x1: Math.min(...q.map((a) => a.x)), y1: Math.min(...q.map((a) => a.y)), x2: Math.max(...q.map((a) => a.x)), y2: Math.max(...q.map((a) => a.y)) };
+    }
     return { x1: Math.min(o.x1, o.x2), y1: Math.min(o.y1, o.y2), x2: Math.max(o.x1, o.x2), y2: Math.max(o.y1, o.y2) };
   }
 
   function nodeFor(o) {
     const line = { stroke: o.color, 'stroke-width': o.width, 'stroke-linecap': 'round', 'stroke-linejoin': 'round', fill: 'none' };
     const fill = o.fill ? { fill: o.color, 'fill-opacity': 0.22 } : {};
-    if (o.type === 'pen') {
-      return mk('path', { ...line, d: o.pts.map((q, i) => `${i ? 'L' : 'M'}${q[0]} ${q[1]}`).join(' ') + (o.pts.length === 1 ? ` L${o.pts[0][0] + 0.1} ${o.pts[0][1]}` : '') });
-    }
-    if (o.type === 'line') return mk('line', { ...line, x1: o.x1, y1: o.y1, x2: o.x2, y2: o.y2 });
+    if (o.type === 'pen') return mk('path', { ...line, d: penPath(o.pts) });
+    const body = () => {
+      if (!curved(o)) return mk('line', { ...line, x1: o.x1, y1: o.y1, x2: o.x2, y2: o.y2 });
+      const c = ctrlPt(o);
+      return mk('path', { ...line, d: `M${o.x1} ${o.y1} Q${c.x} ${c.y} ${o.x2} ${o.y2}` });
+    };
+    if (o.type === 'line') return body();
     if (o.type === 'arrow') {
       const g = mk('g');
-      g.appendChild(mk('line', { ...line, x1: o.x1, y1: o.y1, x2: o.x2, y2: o.y2 }));
-      const th = Math.atan2(o.y2 - o.y1, o.x2 - o.x1), L = 10 + o.width * 2.5;
+      g.appendChild(body());
+      const from = curved(o) ? ctrlPt(o) : { x: o.x1, y: o.y1 };
+      const th = Math.atan2(o.y2 - from.y, o.x2 - from.x), L = 10 + o.width * 2.5;
       const pt = (d) => `${o.x2 - L * Math.cos(th + d)} ${o.y2 - L * Math.sin(th + d)}`;
       g.appendChild(mk('path', { ...line, d: `M${pt(0.45)} L${o.x2} ${o.y2} L${pt(-0.45)}` }));
       return g;
@@ -1407,7 +1462,10 @@
     ui.dsvg.textContent = '';
     for (const o of objs) ui.dsvg.appendChild(nodeFor(o));
     ui.dhud.textContent = '';
-    const o = drawTool === 'select' ? selObj() : null;
+    if (drawTool === 'eraser' && eraserPos) {
+      ui.dhud.appendChild(mk('circle', { cx: eraserPos.x, cy: eraserPos.y, r: eraserR(), fill: 'rgba(255,255,255,.35)', stroke: INK, 'stroke-width': 1.5 }));
+    }
+    const o = selObj();
     if (!o) return;
     const b = bboxOf(o), pad = 6;
     ui.dhud.appendChild(mk('rect', { x: b.x1 - pad, y: b.y1 - pad, width: b.x2 - b.x1 + 2 * pad, height: b.y2 - b.y1 + 2 * pad, fill: 'none', stroke: INK, 'stroke-width': 1.5, 'stroke-dasharray': '5 3' }));
@@ -1415,6 +1473,13 @@
       for (const [k, x, y] of [['p1', o.x1, o.y1], ['p2', o.x2, o.y2]]) {
         const h = mk('circle', { cx: x, cy: y, r: 7, fill: '#f59e0b', stroke: '#fff', 'stroke-width': 2, class: 'hd' });
         h.addEventListener('pointerdown', (ev) => startEndDrag(ev, k));
+        ui.dhud.appendChild(h);
+      }
+      if (o.type === 'line' || o.type === 'arrow') {
+        // The dot on the middle of the curve: drag it to bend (or straighten) the line.
+        const m = curved(o) ? curvePt(o, 0.5) : chordMid(o);
+        const h = mk('circle', { cx: m.x, cy: m.y, r: 7, fill: '#22c55e', stroke: '#fff', 'stroke-width': 2, class: 'hd' });
+        h.addEventListener('pointerdown', (ev) => startBendDrag(ev));
         ui.dhud.appendChild(h);
       }
     }
@@ -1431,7 +1496,7 @@
     ui.dColor.value = /^#[0-9a-f]{6}$/i.test(drawColor) ? drawColor : '#ff2d8a';
     ui.dWidth.value = String(drawW);
     ui.dFill.checked = drawFill;
-    ui.dLayer.style.cursor = drawTool === 'select' ? 'default' : drawTool === 'text' ? 'text' : 'crosshair';
+    ui.dLayer.style.cursor = drawTool === 'select' ? 'default' : drawTool === 'text' ? 'text' : drawTool === 'eraser' ? 'none' : 'crosshair';
   }
 
   function enterDraw() {
@@ -1443,6 +1508,8 @@
     ui.dsvg = mk('svg');
     ui.dLayer.appendChild(ui.dsvg);
     ui.dLayer.addEventListener('pointerdown', onDrawDown);
+    ui.dLayer.addEventListener('pointermove', (e) => { if (drawTool === 'eraser') { eraserPos = { x: e.clientX, y: e.clientY }; renderDraw(); } });
+    ui.dLayer.addEventListener('pointerleave', () => { eraserPos = null; renderDraw(); });
     ui.dhud = null;
     const hud = el('div', 'drawhud hud');
     ui.dhudWrap = hud;
@@ -1469,9 +1536,14 @@
     });
     const tools = el('div', 'btns');
     ui.dTools = {};
-    for (const [id, text] of TOOLS) {
-      ui.dTools[id] = button(text, '', () => { commitText(); drawTool = id; if (id !== 'select') selId = null; syncDraw(); });
-      tools.appendChild(ui.dTools[id]);
+    for (const [id, title, icon] of TOOLS) {
+      const b = el('button', 'b icon');
+      b.innerHTML = icon;
+      b.title = title;
+      b.dataset.tool = id;
+      b.addEventListener('click', () => { commitText(); drawTool = id; selId = null; syncDraw(); });
+      ui.dTools[id] = b;
+      tools.appendChild(b);
     }
     const opts = el('div', 'btns');
     ui.dSwatches = PALETTE.map((c) => {
@@ -1582,7 +1654,12 @@
       const o = objs[i], b = bboxOf(o), tol = 8 + o.width / 2;
       const inside = x >= b.x1 - tol && x <= b.x2 + tol && y >= b.y1 - tol && y <= b.y2 + tol;
       if (!inside) continue;
-      if (o.type === 'line' || o.type === 'arrow') { if (distSeg(x, y, o.x1, o.y1, o.x2, o.y2) <= tol) return o; }
+      if (o.type === 'line' || o.type === 'arrow') {
+        if (curved(o)) {
+          const q = Array.from({ length: 25 }, (_, j) => curvePt(o, j / 24));
+          if (q.some((a, j) => distSeg(x, y, a.x, a.y, (q[j + 1] || a).x, (q[j + 1] || a).y) <= tol)) return o;
+        } else if (distSeg(x, y, o.x1, o.y1, o.x2, o.y2) <= tol) return o;
+      }
       else if (o.type === 'pen') { if (o.pts.some((q, j) => distSeg(x, y, q[0], q[1], (o.pts[j + 1] || q)[0], (o.pts[j + 1] || q)[1]) <= tol)) return o; }
       else if ((o.type === 'rect' || o.type === 'ellipse') && !o.fill) {
         // An unfilled box is only grabbed by its outline.
@@ -1628,6 +1705,79 @@
     h.addEventListener('pointerup', up);
   }
 
+  const eraserR = () => 6 + drawW * 3;
+
+  // Rub out part of a freehand stroke (splitting it), or remove any other mark you touch.
+  function eraseAt(x, y) {
+    const r = eraserR();
+    const next = [];
+    let changed = false;
+    for (const o of objs) {
+      if (o.type === 'pen') {
+        const runs = [];
+        let run = [];
+        for (const q of o.pts) {
+          if (Math.hypot(q[0] - x, q[1] - y) <= r) { if (run.length) runs.push(run); run = []; }
+          else run.push(q);
+        }
+        if (run.length) runs.push(run);
+        if (runs.length === 1 && runs[0].length === o.pts.length) { next.push(o); continue; }
+        changed = true;
+        for (const part of runs) if (part.length >= 2) next.push({ ...o, id: ++objSeq, pts: part });
+      } else if (o.type === 'text' || hitNear(o, x, y, r)) {
+        if (o.type === 'text') { const b = bboxOf(o); if (!(x >= b.x1 - r && x <= b.x2 + r && y >= b.y1 - r && y <= b.y2 + r)) { next.push(o); continue; } }
+        changed = true;
+      } else next.push(o);
+    }
+    if (changed) { objs = next; selId = null; }
+    return changed;
+  }
+
+  // Is point (x, y) within `r` of this mark's drawn stroke (or inside it, if filled)?
+  function hitNear(o, x, y, r) {
+    if (o.type === 'line' || o.type === 'arrow') {
+      if (curved(o)) {
+        const q = Array.from({ length: 25 }, (_, j) => curvePt(o, j / 24));
+        return q.some((a, j) => distSeg(x, y, a.x, a.y, (q[j + 1] || a).x, (q[j + 1] || a).y) <= r);
+      }
+      return distSeg(x, y, o.x1, o.y1, o.x2, o.y2) <= r;
+    }
+    const b = bboxOf(o);
+    if (o.type === 'rect') {
+      if (o.fill && x >= b.x1 && x <= b.x2 && y >= b.y1 && y <= b.y2) return true;
+      const inside = x >= b.x1 - r && x <= b.x2 + r && y >= b.y1 - r && y <= b.y2 + r;
+      return inside && Math.min(Math.abs(x - b.x1), Math.abs(x - b.x2), Math.abs(y - b.y1), Math.abs(y - b.y2)) <= r;
+    }
+    if (o.type === 'ellipse') {
+      const rx = (b.x2 - b.x1) / 2 || 1, ry = (b.y2 - b.y1) / 2 || 1;
+      const nx = (x - (b.x1 + b.x2) / 2) / rx, ny = (y - (b.y1 + b.y2) / 2) / ry;
+      const d = Math.hypot(nx, ny);
+      if (o.fill && d <= 1) return true;
+      return Math.abs(d - 1) * Math.min(rx, ry) <= r;
+    }
+    return false;
+  }
+
+  function startBendDrag(ev) {
+    const o = selObj();
+    if (!o) return;
+    ev.preventDefault(); ev.stopPropagation();
+    pushUndo();
+    const h = ev.currentTarget;
+    h.setPointerCapture(ev.pointerId);
+    const move = (m) => {
+      const mid = chordMid(o);
+      // The dot sits on the curve's middle, which is halfway to the control point.
+      o.cx = 2 * (m.clientX - mid.x);
+      o.cy = 2 * (m.clientY - mid.y);
+      if (Math.hypot(o.cx, o.cy) < 6) { o.cx = 0; o.cy = 0; } // snaps back to straight
+      renderDraw();
+    };
+    const up = () => { h.removeEventListener('pointermove', move); h.removeEventListener('pointerup', up); syncDraw(); };
+    h.addEventListener('pointermove', move);
+    h.addEventListener('pointerup', up);
+  }
+
   function onDrawDown(ev) {
     if (ev.button !== 0) return;
     ev.preventDefault();
@@ -1649,22 +1799,49 @@
     } else if (drawTool === 'text') {
       startText(x0, y0);
       return;
+    } else if (drawTool === 'eraser') {
+      selId = null;
+      pushUndo();
+      let any = eraseAt(x0, y0);
+      renderDraw();
+      let last = { x: x0, y: y0 };
+      move = (m) => {
+        // Erase along the whole path, not just at each mouse sample, so quick strokes leave no gaps.
+        const dist = Math.hypot(m.clientX - last.x, m.clientY - last.y);
+        const steps = Math.max(1, Math.ceil(dist / (eraserR() / 2)));
+        for (let i = 1; i <= steps; i++) {
+          if (eraseAt(last.x + ((m.clientX - last.x) * i) / steps, last.y + ((m.clientY - last.y) * i) / steps)) any = true;
+        }
+        last = { x: m.clientX, y: m.clientY };
+        eraserPos = { x: m.clientX, y: m.clientY };
+        renderDraw();
+      };
+      up = () => { if (!any) dUndo.pop(); finish(); };
     } else {
+      selId = null;
       pushUndo();
       const o = drawTool === 'pen'
         ? { id: ++objSeq, type: 'pen', color: drawColor, width: drawW, pts: [[x0, y0]] }
-        : { id: ++objSeq, type: drawTool, color: drawColor, width: drawW, fill: drawFill && (drawTool === 'rect' || drawTool === 'ellipse'), x1: x0, y1: y0, x2: x0, y2: y0 };
+        : { id: ++objSeq, type: drawTool === 'curve' ? 'line' : drawTool, color: drawColor, width: drawW, fill: drawFill && (drawTool === 'rect' || drawTool === 'ellipse'), x1: x0, y1: y0, x2: x0, y2: y0, cx: 0, cy: 0 };
       objs.push(o);
       move = (m) => {
         if (o.type === 'pen') {
           const last = o.pts[o.pts.length - 1];
           if (Math.hypot(m.clientX - last[0], m.clientY - last[1]) >= 2) o.pts.push([m.clientX, m.clientY]);
-        } else { o.x2 = m.clientX; o.y2 = m.clientY; constrain(o, m.shiftKey); }
+        } else {
+          o.x2 = m.clientX; o.y2 = m.clientY; constrain(o, m.shiftKey);
+          // A new curve starts with a gentle bend you can adjust with the green dot.
+          if (drawTool === 'curve') { const len = Math.hypot(o.x2 - o.x1, o.y2 - o.y1); o.cx = (-(o.y2 - o.y1) / (len || 1)) * len * 0.4; o.cy = ((o.x2 - o.x1) / (len || 1)) * len * 0.4; }
+        }
         renderDraw();
       };
       up = () => {
         const tiny = o.type !== 'pen' && Math.hypot(o.x2 - o.x1, o.y2 - o.y1) < 4;
         if (tiny) { objs = objs.filter((q) => q !== o); dUndo.pop(); }
+        else {
+          if (o.type === 'pen') o.pts = smoothPts(o.pts);
+          selId = o.id; // keep its handles handy (ends, and the bend dot on curves)
+        }
         finish();
       };
     }
@@ -1720,7 +1897,7 @@
       const box = { x: round(b.x1), y: round(b.y1), w: round(b.x2 - b.x1), h: round(b.y2 - b.y1) };
       const pts = [];
       if (o.type === 'text') pts.push([o.x, o.y - o.size / 2]);
-      else if (o.type === 'arrow' || o.type === 'line') pts.push([o.x1, o.y1], [o.x2, o.y2]);
+      else if (o.type === 'arrow' || o.type === 'line') { pts.push([o.x1, o.y1], [o.x2, o.y2]); if (curved(o)) { const m = curvePt(o, 0.5); pts.push([m.x, m.y]); } }
       else {
         pts.push([(b.x1 + b.x2) / 2, (b.y1 + b.y2) / 2]);
         if (o.type === 'rect' || o.type === 'ellipse') {
@@ -1733,7 +1910,7 @@
         const t = targetAt(x, y);
         if (t && !seen.has(t.selector)) { seen.add(t.selector); targets.push(t); }
       }
-      return { n: i + 1, kind: o.type === 'rect' ? 'box' : o.type, color: o.color, filled: !!o.fill, text: o.text || '', box, targets: targets.slice(0, 4) };
+      return { n: i + 1, kind: o.type === 'rect' ? 'box' : curved(o) ? (o.type === 'arrow' ? 'curved arrow' : 'curve') : o.type, color: o.color, filled: !!o.fill, text: o.text || '', box, targets: targets.slice(0, 4) };
     });
   }
 
