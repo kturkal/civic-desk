@@ -26,7 +26,7 @@ const stampFile = path.join(dir, 'stamp');
 const icon = path.join(root, 'build', 'icon.icns');
 
 const version = JSON.parse(fs.readFileSync(path.join(root, 'node_modules', 'electron', 'package.json'), 'utf8')).version;
-const stamp = `${version}:${fs.existsSync(icon) ? fs.statSync(icon).mtimeMs : 0}`;
+const stamp = `v2:${version}:${fs.existsSync(icon) ? fs.statSync(icon).mtimeMs : 0}`;
 
 let current = '';
 try { current = fs.readFileSync(stampFile, 'utf8'); } catch { /* first run */ }
@@ -44,6 +44,13 @@ if (current !== stamp || !fs.existsSync(dst)) {
   set('CFBundleDisplayName', 'Desk');
   set('CFBundleIdentifier', 'com.desk.app.dev');
   if (fs.existsSync(icon)) fs.copyFileSync(icon, path.join(dst, 'Contents', 'Resources', 'electron.icns'));
+  // Make the bundle self-launching: opening it from the Dock or Finder (no command-line path)
+  // would otherwise show Electron's welcome screen. This shim points it at the source.
+  const shim = path.join(dst, 'Contents', 'Resources', 'app');
+  fs.mkdirSync(shim, { recursive: true });
+  fs.writeFileSync(path.join(shim, 'package.json'), JSON.stringify({ name: 'desk', main: 'index.js' }));
+  fs.writeFileSync(path.join(shim, 'index.js'),
+    `process.env.DESK_STUDIO = '1';\nrequire(${JSON.stringify(path.join(root, 'src', 'main.js'))});\n`);
   execFileSync('codesign', ['--force', '--deep', '--sign', '-', dst], { stdio: 'ignore' });
   try {
     execFileSync('/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister', ['-f', dst]);

@@ -243,19 +243,21 @@
     fontBtn.setAttribute('aria-expanded', 'false');
   }
 
-  function pickFont(name) {
+  function pickFont(name, viaKeyboard) {
     editor.focus();
     document.execCommand('fontName', false, name);
     pendingFont = name;
     state.defaultFont = name; // remembered for the next tab you create
     closeFontList();
     saveCurrent(); updateToolbar(); persist();
+    if (viaKeyboard) fontBtn.focus(); // keep your place in the panel when using the keyboard
   }
 
   function fontItem(name, mine) {
     const li = document.createElement('li');
     li.dataset.font = name;
     li.setAttribute('role', 'option');
+    li.tabIndex = -1; // reachable with the arrow keys
     li.style.fontFamily = `"${name.replace(/"/g, '')}"`;
     const label = document.createElement('span');
     label.textContent = name;
@@ -266,6 +268,7 @@
       rm.className = 'rm';
       rm.textContent = '\u00d7';
       rm.title = 'Remove from my fonts';
+      rm.tabIndex = -1;
       rm.addEventListener('mousedown', (e) => e.preventDefault());
       rm.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -275,7 +278,7 @@
       li.appendChild(rm);
     }
     li.addEventListener('mousedown', (e) => e.preventDefault()); // keep the text selection
-    li.addEventListener('click', () => pickFont(name));
+    li.addEventListener('click', (e) => pickFont(name, e.detail === 0));
     return li;
   }
 
@@ -305,6 +308,8 @@
 
   fontAdd.addEventListener('keydown', (e) => {
     e.stopPropagation();
+    if (e.key === 'ArrowUp' || e.key === 'ArrowDown') { e.preventDefault(); panelStep(e.key, fontAdd); return; }
+    if (e.key === 'Escape') { e.preventDefault(); closeFontList(); fontBtn.focus(); return; }
     fontAdd.classList.remove('bad');
     if (e.key !== 'Enter') return;
     e.preventDefault();
@@ -354,15 +359,68 @@
 
   panel.querySelectorAll('button[data-cmd]').forEach((b) => {
     b.addEventListener('mousedown', (e) => e.preventDefault()); // keep the text selection
-    b.addEventListener('click', () => {
+    b.addEventListener('click', (e) => {
       editor.focus();
       document.execCommand(b.dataset.cmd, false, b.dataset.val || null);
       saveCurrent(); updateCount(); updateToolbar(); persist();
+      if (e.detail === 0) b.focus(); // keyboard: stay on the button so the arrows keep working
     });
   });
   $('#collapse').addEventListener('click', () => { closeFontList(); setPanel(false); });
   fab.addEventListener('click', () => setPanel(true));
   document.addEventListener('selectionchange', () => { updateToolbar(); updateCount(); });
+
+
+  /* ---------- Keyboard navigation in the Format panel ---------- */
+  // Cmd+Shift+F jumps into the panel. Arrow keys move to the nearest control in that
+  // direction, Enter/Space applies it, Escape goes back to the text.
+
+  function panelItems() {
+    return [...panel.querySelectorAll('#collapse, #font-btn, #font-list li[data-font], #font-add, button[data-cmd]')]
+      .filter((n) => n.offsetParent !== null);
+  }
+
+  function panelStep(key, from) {
+    const items = panelItems();
+    const mid = (n) => { const r = n.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; };
+    const cur = mid(from);
+    const SAME_ROW = 10;
+    let pick = null;
+    if (key === 'ArrowLeft' || key === 'ArrowRight') {
+      const dir = key === 'ArrowRight' ? 1 : -1;
+      const row = items.filter((n) => n !== from && Math.abs(mid(n).y - cur.y) < SAME_ROW && (mid(n).x - cur.x) * dir > 0);
+      pick = row.sort((a, b) => Math.abs(mid(a).x - cur.x) - Math.abs(mid(b).x - cur.x))[0];
+    } else {
+      const dir = key === 'ArrowDown' ? 1 : -1;
+      const beyond = items.filter((n) => (mid(n).y - cur.y) * dir > SAME_ROW);
+      if (beyond.length) {
+        const nearestY = Math.min(...beyond.map((n) => Math.abs(mid(n).y - cur.y)));
+        pick = beyond
+          .filter((n) => Math.abs(mid(n).y - cur.y) - nearestY < SAME_ROW)
+          .sort((a, b) => Math.abs(mid(a).x - cur.x) - Math.abs(mid(b).x - cur.x))[0];
+      }
+    }
+    if (pick) pick.focus();
+  }
+
+  panel.addEventListener('keydown', (e) => {
+    if (e.target === fontAdd || e.metaKey || e.ctrlKey || e.altKey) return;
+    if (/^Arrow/.test(e.key)) {
+      e.preventDefault();
+      panelStep(e.key, e.target);
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      if (!fontPop.hidden) { closeFontList(); fontBtn.focus(); } else editor.focus();
+    } else if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('li[data-font]')) {
+      e.preventDefault();
+      e.target.click();
+    }
+  });
+
+  function focusPanel() {
+    if (!state.inspectorOpen) setPanel(true);
+    fontBtn.focus();
+  }
 
   /* ---------- Editor, window, shortcuts ---------- */
 
@@ -381,7 +439,8 @@
   // Cmd+T new, Cmd+W close, Cmd+\ toggle panel, Cmd+1..9 jump, Ctrl+Tab cycle
   window.addEventListener('keydown', (e) => {
     const mod = e.metaKey || e.ctrlKey;
-    if (mod && e.key === 't') { e.preventDefault(); newTab(); }
+    if (mod && e.shiftKey && e.key.toLowerCase() === 'f') { e.preventDefault(); focusPanel(); }
+    else if (mod && e.key === 't') { e.preventDefault(); newTab(); }
     else if (mod && e.key === 'w') { e.preventDefault(); closeTab(state.active); }
     else if (mod && e.key === '\\') { e.preventDefault(); setPanel(!state.inspectorOpen); }
     else if (mod && /^[1-9]$/.test(e.key)) {

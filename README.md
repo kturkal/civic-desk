@@ -35,13 +35,13 @@ To change the icon, replace `build/icon.svg` and run `bunx electron scripts/rend
 | Jump to tab | `Cmd+1` to `Cmd+9` |
 | Cycle tabs | `Ctrl+Tab` / `Ctrl+Shift+Tab` |
 | Font | Format panel, Font picker. Fonts you installed yourself (e.g. via Font Book, read from `~/Library/Fonts`) are pinned at the top. You can also add any Google Font by name at the bottom of the list |
-| Format | The panel on the right: styles, bold/italic/underline, lists, alignment, undo. Collapse it to a circle, reopen with `Aa` or `Cmd+\` |
+| Format | The panel on the right: styles, bold/italic/underline, lists, alignment, undo. Collapse it to a circle, reopen with `Aa` or `Cmd+\`. `Cmd+Shift+F` jumps into it: arrow keys move between controls, `Enter` applies, `Esc` returns to the text |
 
 ## Studio (dev tool)
 
 Edit the UI visually instead of describing it in words. Run Desk from source (`bun run start`) and press `Cmd+L` (or **Studio > Studio Mode**), or press and hold any component for 4 seconds.
 
-- Click any element. Drag the pink handles to resize (hold `Shift` to keep the proportions, so a circle stays a circle), the green ones for padding, the orange one for corner radius. Press `Delete` (or **Delete element**) to remove the selected element. `Up` selects the parent, `Cmd+Z` undoes, `Esc` exits.
+- Click any element. Drag the pink handles to resize (hold `Shift` to keep the proportions, so a circle stays a circle), the green ones for padding, the orange one for corner radius. Press `Delete` (or **Delete element**) to remove the selected element. **Style** opens a pop-out for border, fill, text color, size and weight. **Shape** opens a shape mode: round each corner separately (`Shift` for all four), slice the shape with a line (a circle cut in half becomes a semicircle), and move it (arrow keys nudge). `Up` selects the parent, `Cmd+Z` undoes, `Esc` exits.
 - Studio records exact before/after values and finds likely source lines, then writes `.studio/brief.md` with before and after screenshots. **View brief** shows it.
 - **Send to agent** runs Claude Code in the project (`claude -p`, limited to Read/Edit/Glob/Grep) on that brief. It only runs when the git tree is clean, so the agent's edits show up as their own diff.
 - The brief file is always there, so you can also point your own agent session at `.studio/brief.md`.
