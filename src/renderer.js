@@ -424,6 +424,44 @@
 
   /* ---------- Editor, window, shortcuts ---------- */
 
+  // Copy and cut keep bold, italic, underline, headings, lists and quotes, but drop every color,
+  // background and font. Otherwise the browser copies the editor's dark-mode colors too, which
+  // turns the background of an email black.
+  const KEEP = new Set(['B', 'STRONG', 'I', 'EM', 'U', 'S', 'H1', 'H2', 'H3', 'P', 'DIV', 'BR',
+    'UL', 'OL', 'LI', 'BLOCKQUOTE']);
+  function cleanClone(root) {
+    for (const el of [...root.querySelectorAll('*')]) {
+      const st = el.style;
+      const bold = parseInt(st.fontWeight, 10) >= 600 || st.fontWeight === 'bold';
+      const italic = st.fontStyle === 'italic';
+      el.removeAttribute('style');
+      el.removeAttribute('class');
+      el.removeAttribute('color');
+      el.removeAttribute('face');
+      el.removeAttribute('size');
+      if (KEEP.has(el.tagName)) continue;
+      // Unwrap spans and fonts, keeping their bold/italic as real tags.
+      let inner = document.createDocumentFragment();
+      while (el.firstChild) inner.appendChild(el.firstChild);
+      if (italic) { const i = document.createElement('i'); i.appendChild(inner); inner = i; }
+      if (bold) { const b = document.createElement('b'); b.appendChild(inner); inner = b; }
+      el.replaceWith(inner);
+    }
+  }
+  for (const type of ['copy', 'cut']) {
+    editor.addEventListener(type, (e) => {
+      const sel = window.getSelection();
+      if (!sel || sel.isCollapsed) return;
+      const box = document.createElement('div');
+      box.appendChild(sel.getRangeAt(0).cloneContents());
+      cleanClone(box);
+      e.clipboardData.setData('text/plain', sel.toString());
+      e.clipboardData.setData('text/html', box.innerHTML);
+      e.preventDefault();
+      if (type === 'cut') document.execCommand('delete');
+    });
+  }
+
   editor.addEventListener('input', () => { pendingFont = null; saveCurrent(); updateCount(); persist(); updateToolbar(); });
   // Moving the cursor yourself means the label should follow where you are now.
   editor.addEventListener('mousedown', () => { pendingFont = null; });
