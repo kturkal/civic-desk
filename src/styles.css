@@ -237,18 +237,17 @@ html, body {
 #panel .group button:focus-visible { background: var(--hover); }
 #font-list li:focus-visible { background: var(--hover); }
 
-/* Collapse control: the outline of a quarter-disc centered on the panel's top-right corner.
-   No fill: just a curved line from the top border to the right border, and an arrow inside. */
+/* Collapse control: a curved line from the top border to the right border (a quarter-disc
+   outline, arched a little past a true circle) with an arrow centered inside. No fill. */
 #collapse {
   position: absolute; top: 76px; right: 16px; z-index: 2; /* above the panel */
-  --r: 52px;
+  --r: 58px;
   width: var(--r); height: var(--r);
-  padding: 0; cursor: pointer;
+  padding: 0; cursor: pointer; border: 0;
   background: transparent; color: var(--civic-blue);
-  border: 0 solid var(--civic-blue); border-left-width: 4px; border-bottom-width: 4px;
-  border-radius: 0 var(--radius) 0 var(--r);
-  display: grid; place-items: center;
+  border-radius: 0 var(--radius) 0 var(--r); /* click area follows the shape */
 }
-#collapse svg { transform: translate(-3px, 3px); } /* centered in the area between the curve and the corner */ /* sit on the diagonal, toward the corner */
-#collapse:hover { color: var(--civic-blue-light); border-color: var(--civic-blue-light); }
+#collapse .arc { position: absolute; inset: 0; }
+#collapse .arrow { position: absolute; left: 21px; top: 21px; transform: translate(-2px, 2px); } /* centered between the curve and the corner */
+#collapse:hover { color: var(--civic-blue-light); }
 #collapse[hidden] { display: none; }
