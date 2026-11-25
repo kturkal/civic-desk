@@ -430,16 +430,20 @@
   const KEEP = new Set(['B', 'STRONG', 'I', 'EM', 'U', 'S', 'H1', 'H2', 'H3', 'P', 'DIV', 'BR',
     'UL', 'OL', 'LI', 'BLOCKQUOTE']);
   function cleanClone(root) {
+    root.querySelectorAll('style, script, meta, title, head, link, img, svg, iframe').forEach((n) => n.remove());
     for (const el of [...root.querySelectorAll('*')]) {
       const st = el.style;
       const bold = parseInt(st.fontWeight, 10) >= 600 || st.fontWeight === 'bold';
       const italic = st.fontStyle === 'italic';
+      const fw = st.fontWeight;
       el.removeAttribute('style');
       el.removeAttribute('class');
       el.removeAttribute('color');
       el.removeAttribute('face');
       el.removeAttribute('size');
-      if (KEEP.has(el.tagName)) continue;
+      // Google Docs wraps whole pastes in <b style="font-weight:normal">: that is not bold.
+      const fakeBold = (el.tagName === 'B' || el.tagName === 'STRONG') && fw && !bold;
+      if (KEEP.has(el.tagName) && !fakeBold) continue;
       // Unwrap spans and fonts, keeping their bold/italic as real tags.
       let inner = document.createDocumentFragment();
       while (el.firstChild) inner.appendChild(el.firstChild);
@@ -448,6 +452,19 @@
       el.replaceWith(inner);
     }
   }
+  // Paste keeps the same things (bold, italic, headings...) and drops the source's colors and
+  // backgrounds, so pasting from an email never brings the email's background along.
+  editor.addEventListener('paste', (e) => {
+    const html = e.clipboardData.getData('text/html');
+    const text = e.clipboardData.getData('text/plain');
+    e.preventDefault();
+    if (!html) { document.execCommand('insertText', false, text); return; }
+    const box = document.createElement('div');
+    box.innerHTML = html;
+    cleanClone(box);
+    document.execCommand('insertHTML', false, box.innerHTML);
+  });
+
   for (const type of ['copy', 'cut']) {
     editor.addEventListener(type, (e) => {
       const sel = window.getSelection();
