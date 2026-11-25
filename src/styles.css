@@ -237,18 +237,18 @@ html, body {
 #panel .group button:focus-visible { background: var(--hover); }
 #font-list li:focus-visible { background: var(--hover); }
 
-/* Collapse control: a quarter-disc centered on the panel's top-right corner, filled with the
-   border color so it reads as part of the frame. Its curved edge cuts into the panel; its
-   outer corner follows the panel's own rounded corner. */
+/* Collapse control: the outline of a quarter-disc centered on the panel's top-right corner.
+   No fill: just a curved line from the top border to the right border, and an arrow inside. */
 #collapse {
   position: absolute; top: 76px; right: 16px; z-index: 2; /* above the panel */
   --r: 52px;
   width: var(--r); height: var(--r);
-  border: 0; padding: 0; cursor: pointer;
-  background: var(--civic-blue); color: #fff;
+  padding: 0; cursor: pointer;
+  background: transparent; color: var(--civic-blue);
+  border: 0 solid var(--civic-blue); border-left-width: 4px; border-bottom-width: 4px;
   border-radius: 0 var(--radius) 0 var(--r);
   display: grid; place-items: center;
 }
-#collapse svg { transform: translate(7px, -7px); } /* sit on the diagonal, toward the corner */
-#collapse:hover { background: var(--civic-blue-light); }
+#collapse svg { transform: translate(0, 0); } /* sit on the diagonal, toward the corner */
+#collapse:hover { color: var(--civic-blue-light); border-color: var(--civic-blue-light); }
 #collapse[hidden] { display: none; }
