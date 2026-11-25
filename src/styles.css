@@ -134,19 +134,9 @@ html, body {
 }
 .round:hover { background: var(--civic-blue); color: #fff; }
 
-/* The collapse control is a semicircle that grows out of the right-hand border: flat side
-   flush against it, curved side facing in. Closed (#fab) it sits on the window border;
-   open (#collapse) it sits on the panel's border at the top-right corner. */
-.half {
-  background: var(--civic-blue); color: #fff; border: 0;
-  border-radius: 999px 0 0 999px;
-  font-family: inherit; font-weight: 700; cursor: pointer; padding: 0;
-  display: grid; place-items: center;
-}
-.half:hover { background: var(--civic-blue-light); }
 #fab {
-  position: absolute; top: 76px; right: 0;
-  width: 32px; height: 64px; font-size: 14px; padding-right: 4px;
+  position: absolute; top: 76px; right: 16px;
+  width: 54px; height: 54px; font-size: 15px;
 }
 #fab[hidden], #panel[hidden] { display: none; }
 
@@ -167,10 +157,7 @@ html, body {
   margin-bottom: 12px;
   font-size: 13px; font-weight: 700; color: var(--civic-blue);
 }
-.half.small {
-  width: 22px; height: 44px; margin-right: -22px; /* out to the panel's inner border */
-  font-size: 20px; line-height: 1; padding: 0 4px 2px 0;
-}
+.round.small { width: 30px; height: 30px; border-width: 3px; font-size: 18px; line-height: 1; padding: 0 0 2px; }
 
 .group { margin-bottom: 16px; }
 .label { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin-bottom: 6px; }
