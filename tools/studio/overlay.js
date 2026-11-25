@@ -19,7 +19,7 @@
   const BORDER_W = SIDE_NAMES.map((s) => `border-${s}-width`);
   const STYLE_PROPS = ['background-color', 'color', 'border-top-color', 'border-top-style', 'font-size', 'font-weight', ...BORDER_W];
   const RADII = ['border-top-left-radius', 'border-top-right-radius', 'border-bottom-right-radius', 'border-bottom-left-radius'];
-  const TRACK = ['width', 'height', 'padding-top', 'padding-right', 'padding-bottom', 'padding-left', ...RADII, 'clip-path', 'translate', ...STYLE_PROPS];
+  const TRACK = ['width', 'height', 'padding-top', 'padding-right', 'padding-bottom', 'padding-left', ...RADII, 'clip-path', 'translate', 'z-index', 'position', ...STYLE_PROPS];
   const SIDES = ['padding-top', 'padding-right', 'padding-bottom', 'padding-left'];
   const STATE_CLASSES = new Set(['active', 'on', 'open', 'hover', 'focus', 'selected', 'renaming', 'mine', 'bad']);
 
@@ -228,6 +228,12 @@
     if (e.touched.has('translate') && now('translate') !== e.orig['translate']) {
       rows.push({ prop: 'translate', before: e.orig['translate'], after: now('translate') });
     }
+    if (e.touched.has('z-index') && now('z-index') !== e.orig['z-index']) {
+      rows.push({ prop: 'z-index', before: e.orig['z-index'], after: now('z-index') });
+      if (e.touched.has('position') && now('position') !== e.orig['position']) {
+        rows.push({ prop: 'position', before: e.orig['position'], after: now('position') });
+      }
+    }
     const sidesOf = (names) => names.filter((p) => e.touched.has(p));
     const widths = sidesOf(BORDER_W).filter((p) => Math.abs(px(now(p)) - px(e.orig[p])) >= 0.5);
     if (widths.length === 4 && BORDER_W.every((p) => now(p) === now(BORDER_W[0]))) {
@@ -304,6 +310,76 @@
     selEl = null;
     childStack = [];
     renderList();
+  }
+
+  /* ---------------- stacking order + right-click menu ---------------- */
+
+  const zOf = (node) => { const v = parseInt(getComputedStyle(node).zIndex, 10); return Number.isNaN(v) ? 0 : v; };
+
+  // Reorder among the element's siblings with z-index. z-index only works on positioned
+  // elements (and flex/grid items), so a plain static element is made position: relative.
+  function restack(how) {
+    const t = selEl;
+    if (!t || !t.isConnected) return;
+    const sibs = [...(t.parentElement?.children || [])].filter((n) => n !== t && !inRoot(n));
+    const zs = sibs.map(zOf);
+    const cur = zOf(t);
+    const hi = zs.length ? Math.max(...zs) : 0;
+    const lo = zs.length ? Math.min(...zs) : 0;
+    const next = how === 'front' ? Math.max(hi + 1, cur) : how === 'back' ? Math.min(lo - 1, cur)
+      : how === 'forward' ? cur + 1 : cur - 1;
+    if (next === cur && how !== 'front' && how !== 'back') return;
+    snapshot(t);
+    const e = ensureEdit(t);
+    const parentDisplay = t.parentElement ? getComputedStyle(t.parentElement).display : '';
+    if (getComputedStyle(t).position === 'static' && !/flex|grid/.test(parentDisplay)) {
+      e.touched.add('position');
+      t.style.setProperty('position', 'relative', 'important');
+    }
+    e.touched.add('z-index');
+    t.style.setProperty('z-index', String(next), 'important');
+    renderList();
+  }
+
+  function closeMenu() { ui.menu?.remove(); ui.menu = null; }
+
+  function openMenu(x, y) {
+    closeMenu();
+    const m = el('div', 'ctx hud');
+    const item = (label, fn, disabled) => {
+      const b = el('button', null, label);
+      if (disabled) b.disabled = true;
+      b.addEventListener('click', (ev) => { ev.stopPropagation(); closeMenu(); fn(); });
+      m.appendChild(b);
+    };
+    const hasParent = !!(selEl?.parentElement && selEl.parentElement !== document.body && !inRoot(selEl.parentElement));
+    item('Bring to front', () => restack('front'));
+    item('Bring forward', () => restack('forward'));
+    item('Send backward', () => restack('backward'));
+    item('Send to back', () => restack('back'));
+    m.appendChild(el('hr'));
+    item('Select parent', () => { childStack.push(selEl); selEl = selEl.parentElement; }, !hasParent);
+    item('Style…', () => toggleStylePanel(true));
+    item('Shape…', () => enterShape());
+    item('Draw…', () => enterDraw());
+    m.appendChild(el('hr'));
+    item('Delete', () => deleteSelected());
+    root.appendChild(m);
+    ui.menu = m;
+    const r = m.getBoundingClientRect();
+    m.style.left = `${Math.max(6, Math.min(x, window.innerWidth - r.width - 6))}px`;
+    m.style.top = `${Math.max(6, Math.min(y, window.innerHeight - r.height - 6))}px`;
+  }
+
+  function onContextMenu(e) {
+    if (!on || shapeEl || drawOn) return;
+    if (inRoot(e.target) && e.target.closest?.('.ctx, .panel, .viewer, .cb')) return;
+    // Look through Studio's own handles to the page element underneath.
+    const t = document.elementsFromPoint(e.clientX, e.clientY)
+      .find((n) => !inRoot(n) && n !== document.documentElement && n !== document.body);
+    if (!t) return;
+    selEl = t; childStack = [];
+    openMenu(e.clientX, e.clientY);
   }
 
   function undo() {
@@ -420,6 +496,19 @@
     }
     #__studio .cluster.below .cb:hover::after { bottom: auto; top: 40px; }
     @keyframes __studioBloom { to { opacity: 1; transform: scale(1); } }
+    #__studio .ctx {
+      position: fixed; z-index: 3; min-width: 190px; padding: 6px; border-radius: 16px; pointer-events: auto;
+      background: #fff; color: #1b2430; border: 2px solid ${INK}; box-shadow: 0 8px 28px rgba(0,0,0,.3);
+      font: 600 12.5px -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+    @media (prefers-color-scheme: dark) { #__studio .ctx { background: #151b22; color: #e8eef5; } }
+    #__studio .ctx button {
+      display: block; width: 100%; text-align: left; padding: 6px 12px; border: 0; border-radius: 999px;
+      background: transparent; color: inherit; font: inherit; cursor: pointer;
+    }
+    #__studio .ctx button:hover { background: ${INK}; color: #fff; }
+    #__studio .ctx button[disabled] { opacity: .4; pointer-events: none; }
+    #__studio .ctx hr { border: 0; border-top: 1px solid rgba(128,128,128,.35); margin: 5px 4px; }
     #__studio .shapebar { left: 50%; top: 18px; bottom: auto; transform: translateX(-50%); width: 520px; max-height: none; border-radius: 24px; padding: 10px 14px 12px; }
     #__studio .shapebar .btns { margin: 6px 0; }
     #__studio .shapebar .hint { margin: 4px 0 0; }
@@ -531,7 +620,7 @@
       window.addEventListener('pointermove', move, true);
       window.addEventListener('pointerup', up, true);
     });
-    ui.hint = el('div', 'hint', 'Click an element. Drag pink to resize (hold Shift to keep proportions), green for padding, orange for corners. Delete removes it. Style opens colors and borders, Shape cuts and reshapes, Draw (or D) lets you sketch what you want. Arrow keys move the selection (Shift: 10px). [ selects the parent, ] goes back down. Cmd+Z undoes, Esc exits.');
+    ui.hint = el('div', 'hint', 'Click an element. Drag pink to resize (hold Shift to keep proportions), green for padding, orange for corners. Delete removes it. Right-click for Bring to front, Send to back and more. Style opens colors and borders, Shape cuts and reshapes, Draw (or D) lets you sketch what you want. Arrow keys move the selection (Shift: 10px). [ selects the parent, ] goes back down. Cmd+Z undoes, Esc exits.');
     ui.list = el('div', 'list');
     ui.btns = el('div', 'btns');
     ui.deleteBtn = button('Delete element', '', deleteSelected);
@@ -1945,6 +2034,7 @@
   }
 
   function onPointerDown(e) {
+    if (on && ui.menu && !ui.menu.contains(e.target)) closeMenu();
     if (!on || inRoot(e.target)) return;
     e.preventDefault();
     e.stopPropagation();
@@ -1978,7 +2068,8 @@
     e.preventDefault();
     e.stopPropagation();
     if (e.key === 'Escape') {
-      if (ui.viewer) closeViewer();
+      if (ui.menu) closeMenu();
+      else if (ui.viewer) closeViewer();
       else if (selEl) selEl = null;
       else exit();
     } else if ((e.key === 'Delete' || e.key === 'Backspace') && selEl) {
@@ -2103,6 +2194,7 @@
     if (initial && initial.isConnected) selEl = initial;
     window.addEventListener('pointermove', onMove, true);
     window.addEventListener('pointerdown', onPointerDown, true);
+    window.addEventListener('contextmenu', onContextMenu, true);
     window.addEventListener('keydown', onKey, true);
     for (const t of BLOCKED) window.addEventListener(t, swallow, true);
     window.__studioDo = { doSend }; // test hook
@@ -2115,6 +2207,7 @@
     cancelAnimationFrame(raf);
     window.removeEventListener('pointermove', onMove, true);
     window.removeEventListener('pointerdown', onPointerDown, true);
+    window.removeEventListener('contextmenu', onContextMenu, true);
     window.removeEventListener('keydown', onKey, true);
     for (const t of BLOCKED) window.removeEventListener(t, swallow, true);
     shapeEl = null; pending = null; view = null; busy = false;
