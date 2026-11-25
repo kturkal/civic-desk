@@ -531,7 +531,7 @@
       window.addEventListener('pointermove', move, true);
       window.addEventListener('pointerup', up, true);
     });
-    ui.hint = el('div', 'hint', 'Click an element. Drag pink to resize (hold Shift to keep proportions), green for padding, orange for corners. Delete removes it. Style opens colors and borders, Shape cuts and reshapes, Draw (or D) lets you sketch what you want. ↑ selects the parent, Cmd+Z undoes, Esc exits.');
+    ui.hint = el('div', 'hint', 'Click an element. Drag pink to resize (hold Shift to keep proportions), green for padding, orange for corners. Delete removes it. Style opens colors and borders, Shape cuts and reshapes, Draw (or D) lets you sketch what you want. Arrow keys move the selection (Shift: 10px). [ selects the parent, ] goes back down. Cmd+Z undoes, Esc exits.');
     ui.list = el('div', 'list');
     ui.btns = el('div', 'btns');
     ui.deleteBtn = button('Delete element', '', deleteSelected);
@@ -1136,8 +1136,7 @@
     t.style.setProperty('translate', `${round(e.tx)}px ${round(e.ty)}px`, 'important');
   }
 
-  function nudge(dx, dy) {
-    const t = shapeEl;
+  function nudge(dx, dy, t = shapeEl) {
     snapshotSoon(t);
     const e = ensureEdit(t);
     e.tx += dx; e.ty += dy;
@@ -1984,10 +1983,15 @@
       else exit();
     } else if ((e.key === 'Delete' || e.key === 'Backspace') && selEl) {
       deleteSelected();
-    } else if (e.key === 'ArrowUp' && selEl?.parentElement && selEl.parentElement !== document.body && !inRoot(selEl.parentElement)) {
+    } else if (/^Arrow/.test(e.key) && selEl) {
+      // Arrow keys move the selected element 1px (Shift: 10px), like dragging in Shape > Move.
+      const step = e.shiftKey ? 10 : 1;
+      nudge(e.key === 'ArrowLeft' ? -step : e.key === 'ArrowRight' ? step : 0,
+        e.key === 'ArrowUp' ? -step : e.key === 'ArrowDown' ? step : 0, selEl);
+    } else if (e.key === '[' && selEl?.parentElement && selEl.parentElement !== document.body && !inRoot(selEl.parentElement)) {
       childStack.push(selEl);
       selEl = selEl.parentElement;
-    } else if (e.key === 'ArrowDown' && childStack.length) {
+    } else if (e.key === ']' && childStack.length) {
       selEl = childStack.pop();
     }
   }
