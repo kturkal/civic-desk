@@ -17,6 +17,7 @@ function createWindow() {
     height: 760,
     minWidth: 640,
     minHeight: 420,
+    resizable: true, // drag any edge or corner to resize
     title: 'Desk',
     frame: false,
     transparent: true,
