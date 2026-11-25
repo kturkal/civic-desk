@@ -157,7 +157,17 @@ html, body {
   margin-bottom: 12px;
   font-size: 13px; font-weight: 700; color: var(--civic-blue);
 }
-.round.small { width: 30px; height: 30px; border-width: 3px; font-size: 18px; line-height: 1; padding: 0 0 2px; }
+.panel-head { min-height: 30px; }
+/* Collapse: fills the panel's top-right corner. The panel's own rounded corner is its outer
+   edge; a single arc from the top border round to the right border is its inner edge. */
+.round.small {
+  position: absolute; top: 0; right: 0;
+  width: 48px; height: 42px;
+  border-width: 0 0 var(--border) var(--border);
+  border-radius: 0 var(--radius-inner) 0 100%;
+  font-size: 18px; line-height: 1; padding: 0 0 2px;
+}
+#panel .round.small:focus-visible { outline-offset: -10px; }
 
 .group { margin-bottom: 16px; }
 .label { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin-bottom: 6px; }
@@ -221,8 +231,24 @@ html, body {
 #font-add.bad { border-color: #d9534f; }
 
 /* Keyboard focus in the Format panel */
-#panel button:focus-visible, #font-list li:focus-visible, #fab:focus-visible {
+#panel button:focus-visible, #font-list li:focus-visible, #fab:focus-visible, #collapse:focus-visible {
   outline: 2px solid var(--civic-blue); outline-offset: 2px;
 }
 #panel .group button:focus-visible { background: var(--hover); }
 #font-list li:focus-visible { background: var(--hover); }
+
+/* Collapse control: a quarter-disc centered on the panel's top-right corner, filled with the
+   border color so it reads as part of the frame. Its curved edge cuts into the panel; its
+   outer corner follows the panel's own rounded corner. */
+#collapse {
+  position: absolute; top: 76px; right: 16px; z-index: 2; /* above the panel */
+  --r: 52px;
+  width: var(--r); height: var(--r);
+  border: 0; padding: 0; cursor: pointer;
+  background: var(--civic-blue); color: #fff;
+  border-radius: 0 var(--radius) 0 var(--r);
+  display: grid; place-items: center;
+}
+#collapse svg { transform: translate(7px, -7px); } /* sit on the diagonal, toward the corner */
+#collapse:hover { background: var(--civic-blue-light); }
+#collapse[hidden] { display: none; }
