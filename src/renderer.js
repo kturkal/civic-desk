@@ -335,6 +335,7 @@
     frame.classList.toggle('panel-open', open);
     panel.hidden = !open;
     fab.hidden = open;
+    $('#collapse').hidden = !open;
     persist();
   }
 
@@ -376,7 +377,7 @@
   // direction, Enter/Space applies it, Escape goes back to the text.
 
   function panelItems() {
-    return [...panel.querySelectorAll('#collapse, #font-btn, #font-list li[data-font], #font-add, button[data-cmd]')]
+    return [...document.querySelectorAll('#collapse, #font-btn, #font-list li[data-font], #font-add, button[data-cmd]')]
       .filter((n) => n.offsetParent !== null);
   }
 
@@ -403,7 +404,7 @@
     if (pick) pick.focus();
   }
 
-  panel.addEventListener('keydown', (e) => {
+  function panelKeydown(e) {
     if (e.target === fontAdd || e.metaKey || e.ctrlKey || e.altKey) return;
     if (/^Arrow/.test(e.key)) {
       e.preventDefault();
@@ -415,7 +416,9 @@
       e.preventDefault();
       e.target.click();
     }
-  });
+  }
+  panel.addEventListener('keydown', panelKeydown);
+  $('#collapse').addEventListener('keydown', panelKeydown);
 
   function focusPanel() {
     if (!state.inspectorOpen) setPanel(true);

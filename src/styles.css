@@ -167,10 +167,22 @@ html, body {
   margin-bottom: 12px;
   font-size: 13px; font-weight: 700; color: var(--civic-blue);
 }
-.half.small {
-  width: 22px; height: 44px; margin-right: -22px; /* out to the panel's inner border */
-  font-size: 20px; line-height: 1; padding: 0 4px 2px 0;
+/* Open: a half-disc centered on the panel's top-right corner, its flat side tangent to the
+   rounded corner at 45 degrees, bulging out diagonally. The corner circle has radius
+   --radius, so the 45-degree point is (radius * (1 - cos45)) = 12.9px in from the top and right. */
+#collapse {
+  position: absolute;
+  --d: 44px;
+  width: var(--d); height: calc(var(--d) / 2);
+  right: calc(16px + var(--radius) * 0.2929 - var(--d) / 2);
+  top: calc(76px + var(--radius) * 0.2929 - var(--d) / 2);
+  border-radius: var(--d) var(--d) 0 0;
+  transform-origin: 50% 100%; transform: rotate(45deg);
+  align-items: start; padding-top: 3px;
+  font-size: 20px; line-height: 1;
 }
+#collapse[hidden] { display: none; }
+#collapse span { display: block; transform: rotate(-45deg); }
 
 .group { margin-bottom: 16px; }
 .label { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin-bottom: 6px; }
@@ -234,7 +246,7 @@ html, body {
 #font-add.bad { border-color: #d9534f; }
 
 /* Keyboard focus in the Format panel */
-#panel button:focus-visible, #font-list li:focus-visible, #fab:focus-visible {
+#panel button:focus-visible, #font-list li:focus-visible, #fab:focus-visible, #collapse:focus-visible {
   outline: 2px solid var(--civic-blue); outline-offset: 2px;
 }
 #panel .group button:focus-visible { background: var(--hover); }
