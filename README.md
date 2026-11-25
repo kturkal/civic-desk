@@ -35,7 +35,7 @@ To change the icon, replace `build/icon.svg` and run `bunx electron scripts/rend
 | Jump to tab | `Cmd+1` to `Cmd+9` |
 | Cycle tabs | `Ctrl+Tab` / `Ctrl+Shift+Tab` |
 | Font | Format panel, Font picker. Fonts you installed yourself (e.g. via Font Book, read from `~/Library/Fonts`) are pinned at the top. You can also add any Google Font by name at the bottom of the list |
-| Format | The panel on the right: styles, bold/italic/underline, lists, alignment, undo. Collapse it to a circle, reopen with `Aa` or `Cmd+\`. `Cmd+Shift+F` jumps into it: arrow keys move between controls, `Enter` applies, `Esc` returns to the text |
+| Format | The panel on the right: styles, bold/italic/underline, lists, alignment, undo. Collapse it to a circle, reopen with `Aa` or `Cmd+\`. Drag the panel by its header (or the `Aa` circle when collapsed) to move it anywhere; it keeps its spot between collapsing, reopening and relaunching, and double-clicking the header puts it back. `Cmd+Shift+F` jumps into it: arrow keys move between controls, `Enter` applies, `Esc` returns to the text |
 
 ## Studio (dev tool)
 

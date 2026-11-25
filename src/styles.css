@@ -104,7 +104,7 @@ html, body {
 }
 #page-wrap::-webkit-scrollbar-thumb:hover { background: var(--civic-blue-light); background-clip: padding-box; }
 #page-wrap::-webkit-scrollbar-corner { background: transparent; }
-#frame.panel-open #page-wrap { padding-right: 306px; }
+#frame.panel-open:not(.panel-moved) #page-wrap { padding-right: 306px; } /* room for the panel, unless it was moved */
 #editor {
   max-width: 720px; margin: 0 auto; min-height: 100%;
   outline: none; font-family: Georgia, "Iowan Old Style", serif;
@@ -135,13 +135,16 @@ html, body {
 .round:hover { background: var(--civic-blue); color: #fff; }
 
 #fab {
-  position: absolute; top: 76px; right: 16px;
+  position: absolute; top: var(--ptop, 76px); right: var(--pright, 16px);
+  touch-action: none;
   width: 54px; height: 54px; font-size: 15px;
 }
 #fab[hidden], #panel[hidden] { display: none; }
 
 #panel {
-  position: absolute; top: 76px; right: 16px; bottom: 56px;
+  /* top/right come from the user dragging it (see --ptop / --pright on #frame) */
+  position: absolute; top: var(--ptop, 76px); right: var(--pright, 16px);
+  height: calc(100% - 132px); max-height: calc(100% - var(--ptop, 76px) - 18px);
   width: 262px; overflow-y: auto;
   padding: 20px 22px 22px;
   background: var(--paper);
@@ -240,7 +243,7 @@ html, body {
 /* Collapse control: a curved line from the top border to the right border (a quarter-disc
    outline, arched a little past a true circle) with an arrow centered inside. No fill. */
 #collapse {
-  position: absolute; top: 76px; right: 16px; z-index: 2; /* above the panel */
+  position: absolute; top: var(--ptop, 76px); right: var(--pright, 16px); z-index: 2; /* above the panel */
   --r: 58px;
   width: var(--r); height: var(--r);
   padding: 0; cursor: pointer; border: 0;
@@ -251,3 +254,7 @@ html, body {
 #collapse .arrow { position: absolute; left: 21px; top: 21px; transform: translate(-2px, 2px); } /* centered between the curve and the corner */
 #collapse:hover { color: var(--civic-blue-light); }
 #collapse[hidden] { display: none; }
+
+/* Drag the Format panel by its header, or the Aa circle when it is collapsed. */
+.panel-head { cursor: grab; user-select: none; touch-action: none; }
+body.dragging-panel, body.dragging-panel * { cursor: grabbing !important; user-select: none !important; }

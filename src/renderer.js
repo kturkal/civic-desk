@@ -336,8 +336,63 @@
     panel.hidden = !open;
     fab.hidden = open;
     $('#collapse').hidden = !open;
+    applyPanelPos();
     persist();
   }
+
+  /* ---------- Moving the Format panel ---------- */
+  // Drag the panel by its header, or the Aa circle when collapsed. Both share one position (the
+  // panel's top-right corner), so it stays put when you collapse or reopen it. Double-click the
+  // header to send it back to the default spot.
+  const DEFAULT_POS = { top: 76, right: 16 };
+
+  function applyPanelPos() {
+    const p = state.panelPos;
+    if (!p) {
+      frame.style.removeProperty('--ptop'); frame.style.removeProperty('--pright');
+      frame.classList.remove('panel-moved');
+      return;
+    }
+    const w = (panel.hidden ? fab : panel).offsetWidth || 274;
+    p.top = Math.max(6, Math.min(p.top, frame.clientHeight - 90));
+    p.right = Math.max(6, Math.min(p.right, frame.clientWidth - w - 6));
+    frame.style.setProperty('--ptop', `${p.top}px`);
+    frame.style.setProperty('--pright', `${p.right}px`);
+    frame.classList.toggle('panel-moved', Math.abs(p.right - DEFAULT_POS.right) > 40);
+  }
+
+  let swallowClick = false;
+  function makeDraggable(handle) {
+    handle.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0) return;
+      const start = state.panelPos || { ...DEFAULT_POS };
+      const sx = e.clientX, sy = e.clientY;
+      let moved = false;
+      const move = (ev) => {
+        const dx = ev.clientX - sx, dy = ev.clientY - sy;
+        if (!moved && Math.hypot(dx, dy) < 4) return;
+        if (!moved) { moved = true; document.body.classList.add('dragging-panel'); }
+        state.panelPos = { top: start.top + dy, right: start.right - dx };
+        applyPanelPos();
+      };
+      const up = () => {
+        window.removeEventListener('pointermove', move);
+        window.removeEventListener('pointerup', up);
+        window.removeEventListener('pointercancel', up);
+        document.body.classList.remove('dragging-panel');
+        if (moved) { swallowClick = true; setTimeout(() => { swallowClick = false; }, 100); persist(); }
+      };
+      window.addEventListener('pointermove', move);
+      window.addEventListener('pointerup', up);
+      window.addEventListener('pointercancel', up);
+    });
+  }
+  makeDraggable($('.panel-head'));
+  makeDraggable(fab);
+  // A drag that ends on the Aa circle must not also open the panel.
+  fab.addEventListener('click', (e) => { if (swallowClick) e.stopImmediatePropagation(); }, true);
+  $('.panel-head').addEventListener('dblclick', () => { state.panelPos = null; applyPanelPos(); persist(); });
+  window.addEventListener('resize', applyPanelPos);
 
   const stateCmds = ['bold', 'italic', 'underline', 'strikeThrough',
     'insertUnorderedList', 'insertOrderedList', 'justifyLeft', 'justifyCenter', 'justifyRight'];
