@@ -249,6 +249,6 @@ html, body {
   border-radius: 0 var(--radius) 0 var(--r);
   display: grid; place-items: center;
 }
-#collapse svg { transform: translate(0, 0); } /* sit on the diagonal, toward the corner */
+#collapse svg { transform: translate(-3px, 3px); } /* centered in the area between the curve and the corner */ /* sit on the diagonal, toward the corner */
 #collapse:hover { color: var(--civic-blue-light); border-color: var(--civic-blue-light); }
 #collapse[hidden] { display: none; }
